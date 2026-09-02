@@ -9,7 +9,7 @@ export function JsonTextEditor({ value, onChange }: { value: string; onChange: (
     theme="vs-dark"
     options={{
       minimap: { enabled: false },
-      fontSize: 13,
+      fontSize: 14,
       fontFamily: 'Cascadia Code, Consolas, monospace',
       automaticLayout: true,
       folding: true,

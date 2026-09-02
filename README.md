@@ -1,6 +1,6 @@
 # BayTools
 
-本地运行的开发者工具工作台，提供 Timestamp、颜色转换、JSON 工作区与 Markdown 阅读/编辑能力。所有持久化数据默认保存在工程内的 `Doc` 目录。
+本地运行的开发者工具工作台，提供 Timestamp、颜色转换、JSON 工作区、Markdown 阅读/编辑与多语言查询能力。所有持久化数据默认保存在工程内的 `Doc` 目录。
 
 ## 运行
 
@@ -34,6 +34,7 @@ npm run build
 - `Doc/settings.json`：主题、侧边栏与工作时间设置。
 - `Doc/json`：JSON 工作区。
 - `Doc/color`：最近颜色与收藏颜色。
+- `Doc/language`：多语言来源配置、TXT 缓存与收藏。
 - `Doc/markdown`：扫描目录与阅读器状态；Markdown 原文件仍位于扫描目录。
 - `Doc/trash`：可恢复的 JSON 工作区与 Markdown 文件。
 

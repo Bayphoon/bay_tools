@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, MoreHorizontal, Palette, Plus, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -101,16 +101,20 @@ function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdo
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jsonWorkspaces, markdownTrees, managedMarkdown, refreshJson, refreshMarkdown, refreshManagedMarkdown, settings, saveSettings } = useAppStore()
+  const { jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, settings, saveSettings } = useAppStore()
   const [jsonOpen, setJsonOpen] = useState(!settings?.sidebar.collapsedGroups.includes('json'))
+  const [languageOpen, setLanguageOpen] = useState(!settings?.sidebar.collapsedGroups.includes('language'))
   const [markdownOpen, setMarkdownOpen] = useState(!settings?.sidebar.collapsedGroups.includes('markdown'))
   const jsonActive = location.pathname === '/json' || location.pathname.startsWith('/json/')
+  const languageActive = location.pathname === '/language' || location.pathname.startsWith('/language/')
   const markdownActive = location.pathname === '/markdown' || location.pathname.startsWith('/markdown/')
 
-  const setGroupOpen = (group: 'json' | 'markdown', nextOpen: boolean) => {
-    const open = group === 'json' ? jsonOpen : markdownOpen
+  const setGroupOpen = (group: 'json' | 'language' | 'markdown', nextOpen: boolean) => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : markdownOpen
     if (open === nextOpen) return
-    if (group === 'json') setJsonOpen(nextOpen); else setMarkdownOpen(nextOpen)
+    if (group === 'json') setJsonOpen(nextOpen)
+    else if (group === 'language') setLanguageOpen(nextOpen)
+    else setMarkdownOpen(nextOpen)
     if (!settings) return
     const collapsedGroups = nextOpen
       ? settings.sidebar.collapsedGroups.filter((value) => value !== group)
@@ -118,8 +122,8 @@ export function Sidebar() {
     void saveSettings({ ...settings, sidebar: { ...settings.sidebar, collapsedGroups } }).catch(() => undefined)
   }
 
-  const toggleGroup = (group: 'json' | 'markdown') => {
-    const open = group === 'json' ? jsonOpen : markdownOpen
+  const toggleGroup = (group: 'json' | 'language' | 'markdown') => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : markdownOpen
     setGroupOpen(group, !open)
   }
 
@@ -129,8 +133,14 @@ export function Sidebar() {
     navigate(`/json/${workspace.id}`)
   }
 
-  const selectGroup = async (group: 'json' | 'markdown') => {
-    const active = group === 'json' ? jsonActive : markdownActive
+  const createLanguageSource = async () => {
+    const source = await localBridge.createLanguageSource()
+    await refreshLanguages()
+    navigate(`/language/${source.id}`)
+  }
+
+  const selectGroup = async (group: 'json' | 'language' | 'markdown') => {
+    const active = group === 'json' ? jsonActive : group === 'language' ? languageActive : markdownActive
     if (active) {
       toggleGroup(group)
       return
@@ -139,6 +149,12 @@ export function Sidebar() {
     setGroupOpen(group, true)
     if (group === 'markdown') {
       navigate('/markdown')
+      return
+    }
+    if (group === 'language') {
+      const firstSource = languageSources[0]
+      if (firstSource) navigate(`/language/${firstSource.id}`)
+      else await createLanguageSource()
       return
     }
 
@@ -207,6 +223,25 @@ export function Sidebar() {
       </div>
       <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
       <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
+      <div className="nav-group">
+        <div className="nav-parent">
+          <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><Languages size={16} /><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
+        </div>
+        {languageOpen && <div className="nav-children">{languageSources.map((source) => <div className="nav-child-wrap" key={source.id}>
+          <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><Languages size={13} /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
+          <Menu>{item('删除语种', async () => {
+            if (!window.confirm(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`)) return
+            await localBridge.deleteLanguageSource(source.id)
+            const remaining = languageSources.filter((item) => item.id !== source.id)
+            await refreshLanguages()
+            if (location.pathname === `/language/${source.id}`) {
+              if (remaining[0]) navigate(`/language/${remaining[0].id}`)
+              else navigate('/')
+            }
+          }, true)}</Menu>
+        </div>)}</div>}
+      </div>
       <div className="nav-group">
         <div className="nav-parent">
           <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><FileText size={16} /><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>

@@ -144,6 +144,42 @@ export interface ManagedMarkdownLibrary {
   documents: ManagedMarkdownDocumentSummary[]
 }
 
+export interface LanguageEntry {
+  key: string
+  content: string
+}
+
+export type LanguageSearchMode = 'fuzzy' | 'exact'
+
+export interface LanguageFavorite extends LanguageEntry {
+  favoritedAt: string
+}
+
+export interface LanguageSourceSummary {
+  id: string
+  title: string
+  url: string
+  fileName?: string
+  createdAt: string
+  updatedAt: string
+  lastSyncedAt?: string
+  entryCount: number
+}
+
+export interface LanguageSource extends LanguageSourceSummary {
+  schemaVersion: 1
+  revision: number
+  favorites: LanguageFavorite[]
+}
+
+export interface LanguageEntryPage {
+  items: LanguageEntry[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace'
 
 export interface TrashItem {
@@ -201,6 +237,14 @@ export interface LocalBridge {
   deleteManagedMarkdownFolder(id: string): Promise<void>
   getMarkdownUiState(): Promise<MarkdownUiState>
   updateMarkdownUiState(state: MarkdownUiState): Promise<MarkdownUiState>
+  listLanguageSources(): Promise<LanguageSourceSummary[]>
+  createLanguageSource(): Promise<LanguageSource>
+  getLanguageSource(id: string): Promise<LanguageSource>
+  deleteLanguageSource(id: string): Promise<void>
+  syncLanguageSource(id: string, url: string): Promise<LanguageSource>
+  searchLanguageEntries(id: string, search: string, page: number, mode: LanguageSearchMode): Promise<LanguageEntryPage>
+  searchLanguageFavorites(id: string, search: string, page: number, mode: LanguageSearchMode): Promise<LanguageEntryPage>
+  setLanguageFavorite(id: string, key: string, favorite: boolean, revision: number): Promise<LanguageSource>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>

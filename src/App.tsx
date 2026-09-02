@@ -8,6 +8,7 @@ const HomePage = lazy(() => import('./pages/HomePage').then((module) => ({ defau
 const TimestampPage = lazy(() => import('./pages/TimestampPage').then((module) => ({ default: module.TimestampPage })))
 const ColorPage = lazy(() => import('./pages/ColorPage').then((module) => ({ default: module.ColorPage })))
 const JsonWorkspacePage = lazy(() => import('./pages/JsonWorkspacePage').then((module) => ({ default: module.JsonWorkspacePage })))
+const LanguagePage = lazy(() => import('./pages/LanguagePage').then((module) => ({ default: module.LanguagePage })))
 const MarkdownPage = lazy(() => import('./pages/MarkdownPage').then((module) => ({ default: module.MarkdownPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
@@ -23,6 +24,7 @@ export default function App() {
       <Route path="timestamp" element={<TimestampPage />} />
       <Route path="color" element={<ColorPage />} />
       <Route path="json/:id" element={<JsonWorkspacePage />} />
+      <Route path="language/:id" element={<LanguagePage />} />
       <Route path="markdown" element={<MarkdownPage />} />
       <Route path="markdown/document/:documentId" element={<MarkdownPage />} />
       <Route path="markdown/:sourceId" element={<MarkdownPage />} />

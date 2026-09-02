@@ -6,11 +6,14 @@ import { readFile } from 'node:fs/promises'
 import openBrowser from 'open'
 import type { AppSettings, ColorState, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
 import { AppError } from './errors.js'
+import { LanguageStore } from './languageStore.js'
 import { BayToolsStore } from './store.js'
 import { selectWindowsFolder } from './folderDialog.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
+const languageStore = new LanguageStore(projectRoot)
+const apiVersion = 4
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -45,7 +48,7 @@ app.setErrorHandler((error, _request, reply) => {
   reply.status(appError.statusCode).send({ error: appError.message, code: appError.code, details: appError.details })
 })
 
-app.get('/api/session', async () => ({ token: sessionToken }))
+app.get('/api/session', async () => ({ token: sessionToken, apiVersion }))
 
 app.get('/api/settings', async () => store.getSettings())
 app.put<{ Body: AppSettings }>('/api/settings', async (request) => store.updateSettings(request.body))
@@ -70,6 +73,25 @@ app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/reveal', async (r
 
 app.get('/api/colors', async () => store.getColors())
 app.put<{ Body: ColorState }>('/api/colors', async (request) => store.updateColors(request.body))
+
+app.get('/api/languages', async () => languageStore.listSources())
+app.post('/api/languages', async () => languageStore.createSource())
+app.get<{ Params: { id: string } }>('/api/languages/:id', async (request) => languageStore.getSource(request.params.id))
+app.delete<{ Params: { id: string } }>('/api/languages/:id', async (request, reply) => {
+  await languageStore.deleteSource(request.params.id)
+  return reply.status(204).send()
+})
+app.post<{ Params: { id: string }; Body: { url: string } }>('/api/languages/:id/sync', async (request) => languageStore.syncSource(request.params.id, request.body.url))
+app.get<{ Params: { id: string }; Querystring: { search?: string; page?: string; mode?: 'fuzzy' | 'exact' } }>('/api/languages/:id/search', async (request) => {
+  return languageStore.searchEntries(request.params.id, request.query.search ?? '', Number(request.query.page ?? 1), request.query.mode ?? 'fuzzy')
+})
+app.get<{ Params: { id: string }; Querystring: { search?: string; page?: string; mode?: 'fuzzy' | 'exact' } }>('/api/languages/:id/favorites', async (request) => {
+  return languageStore.searchFavorites(request.params.id, request.query.search ?? '', Number(request.query.page ?? 1), request.query.mode ?? 'fuzzy')
+})
+app.put<{ Params: { id: string }; Body: { key: string; favorite: boolean; revision: number } }>('/api/languages/:id/favorites', async (request) => {
+  const { key, favorite, revision } = request.body
+  return languageStore.setFavorite(request.params.id, key, favorite, revision)
+})
 
 app.post('/api/system/select-directory', async () => {
   if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '目录选择器当前仅支持 Windows')
@@ -162,7 +184,7 @@ async function registerFrontend(): Promise<void> {
 }
 
 export async function buildApp(options?: { serveFrontend?: boolean }) {
-  await store.init()
+  await Promise.all([store.init(), languageStore.init()])
   if (options?.serveFrontend) await registerFrontend()
   return app
 }
