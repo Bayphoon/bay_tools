@@ -2,13 +2,13 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, MoreHorizontal, Palette, Plus, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import type { MarkdownTreeNode } from '../../shared/types'
+import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
 import { localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 
-function Menu({ children, triggerLabel = '更多操作' }: { children: React.ReactNode; triggerLabel?: string }) {
+function Menu({ children, triggerLabel = '更多操作', triggerIcon, alwaysVisible = false }: { children: React.ReactNode; triggerLabel?: string; triggerIcon?: React.ReactNode; alwaysVisible?: boolean }) {
   return <DropdownMenu.Root>
-    <DropdownMenu.Trigger asChild><button className="icon-button nav-action" aria-label={triggerLabel}><MoreHorizontal size={15} /></button></DropdownMenu.Trigger>
+    <DropdownMenu.Trigger asChild><button className={`icon-button nav-action ${alwaysVisible ? 'always-visible' : ''}`} aria-label={triggerLabel}>{triggerIcon ?? <MoreHorizontal size={15} />}</button></DropdownMenu.Trigger>
     <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" sideOffset={4}>{children}</DropdownMenu.Content></DropdownMenu.Portal>
   </DropdownMenu.Root>
 }
@@ -32,7 +32,7 @@ function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: st
       const renamed = await localBridge.renameMarkdownDocument(sourceId, node.relativePath, nextName, document.hash)
       await onChanged()
       navigate(`/markdown/${sourceId}?path=${encodeURIComponent(renamed.relativePath)}`)
-    })}{item('移入垃圾箱', async () => {
+    })}{item('打开文件所在位置', () => { void localBridge.revealMarkdownDocument(sourceId, node.relativePath) })}{item('移入垃圾箱', async () => {
       if (!window.confirm(`将 ${node.name} 移入 BayTools 垃圾箱？`)) return
       const document = await localBridge.getMarkdownDocument(sourceId, node.relativePath)
       await localBridge.trashMarkdownDocument(sourceId, node.relativePath, document.hash)
@@ -42,10 +42,66 @@ function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: st
   </div>)}</>
 }
 
+function ManagedDocumentRow({ document, onChanged }: { document: ManagedMarkdownDocumentSummary; onChanged: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  return <div className="nav-child-wrap">
+    <NavLink className="nav-tree-row nav-file" to={`/markdown/document/${document.id}`}><FileText size={13} /><span>{document.title}</span></NavLink>
+    <Menu>{item('重命名', async () => {
+      const current = await localBridge.getManagedMarkdownDocument(document.id)
+      const title = window.prompt('Markdown 文档名称', current.title)?.trim()
+      if (!title || title === current.title) return
+      await localBridge.updateManagedMarkdownDocument({ ...current, title })
+      await onChanged()
+    })}{item('创建副本', async () => {
+      const duplicate = await localBridge.duplicateManagedMarkdownDocument(document.id)
+      await onChanged()
+      navigate(`/markdown/document/${duplicate.id}`)
+    })}{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('移入垃圾箱', async () => {
+      if (!window.confirm(`将 ${document.title} 移入 BayTools 垃圾箱？`)) return
+      await localBridge.trashManagedMarkdownDocument(document.id)
+      await onChanged()
+      if (location.pathname === `/markdown/document/${document.id}`) navigate('/markdown')
+    }, true)}</Menu>
+  </div>
+}
+
+function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdownLibrary; onChanged: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(true)
+  const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
+  const createDocument = async (folderId?: string) => {
+    const document = await localBridge.createManagedMarkdownDocument(undefined, folderId)
+    await onChanged()
+    navigate(`/markdown/document/${document.id}`)
+  }
+  const rootDocuments = library.documents.filter((document) => !document.folderId)
+  return <div className="source-tree managed-markdown-tree">
+    <div className="source-title"><button className="source-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}<span>BayTools 文档</span></button></div>
+    {open && <>{rootDocuments.map((document) => <ManagedDocumentRow key={document.id} document={document} onChanged={onChanged} />)}{library.folders.map((folder) => {
+      const documents = library.documents.filter((document) => document.folderId === folder.id)
+      const collapsed = collapsedFolders[folder.id] ?? false
+      return <div key={folder.id} className="managed-folder">
+        <div className="source-title"><button className="source-toggle managed-folder-toggle" aria-expanded={!collapsed} onClick={() => setCollapsedFolders((value) => ({ ...value, [folder.id]: !collapsed }))}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={14} /><span>{folder.name}</span></button><Menu>{item('新建空文档', () => { void createDocument(folder.id) })}{item('重命名', async () => {
+          const name = window.prompt('文件夹名称', folder.name)?.trim()
+          if (!name || name === folder.name) return
+          await localBridge.renameManagedMarkdownFolder(folder.id, name)
+          await onChanged()
+        })}{item('删除空文件夹', async () => {
+          if (documents.length || !window.confirm(`删除空文件夹 ${folder.name}？`)) return
+          await localBridge.deleteManagedMarkdownFolder(folder.id)
+          await onChanged()
+        }, true)}</Menu></div>
+        {!collapsed && documents.map((document) => <ManagedDocumentRow key={document.id} document={document} onChanged={onChanged} />)}
+      </div>
+    })}</>}
+  </div>
+}
+
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jsonWorkspaces, markdownTrees, refreshJson, refreshMarkdown, settings, saveSettings } = useAppStore()
+  const { jsonWorkspaces, markdownTrees, managedMarkdown, refreshJson, refreshMarkdown, refreshManagedMarkdown, settings, saveSettings } = useAppStore()
   const [jsonOpen, setJsonOpen] = useState(!settings?.sidebar.collapsedGroups.includes('json'))
   const [markdownOpen, setMarkdownOpen] = useState(!settings?.sidebar.collapsedGroups.includes('markdown'))
   const jsonActive = location.pathname === '/json' || location.pathname.startsWith('/json/')
@@ -98,6 +154,19 @@ export function Sidebar() {
     await refreshMarkdown()
   }
 
+  const createManagedDocument = async () => {
+    const document = await localBridge.createManagedMarkdownDocument()
+    await refreshManagedMarkdown()
+    navigate(`/markdown/document/${document.id}`)
+  }
+
+  const createManagedFolder = async () => {
+    const name = window.prompt('文件夹名称', '未命名文件夹')?.trim()
+    if (!name) return
+    await localBridge.createManagedMarkdownFolder(name)
+    await refreshManagedMarkdown()
+  }
+
   const toggleMarkdownSource = (sourceId: string) => {
     if (!settings) return
     const key = `markdown-source:${sourceId}`
@@ -109,12 +178,12 @@ export function Sidebar() {
   }
 
   return <aside className="sidebar">
-    <div className="brand"><div className="brand-mark">B</div><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
+    <div className="brand"><img className="brand-icon" src="/baytools-icon.png" alt="" /><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
     <nav className="nav-main">
       <NavLink to="/" end className="nav-row"><Home size={16} /><span>主页</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}>{jsonOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}<Braces size={16} /><span>JSON 工具</span></button>
+          <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><Braces size={16} /><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <button className="icon-button nav-action" aria-label="新建 JSON 工作区" onClick={createWorkspace}><Plus size={15} /></button>
         </div>
         {jsonOpen && <div className="nav-children">{jsonWorkspaces.map((workspace) => <div className="nav-child-wrap" key={workspace.id}>
@@ -128,7 +197,7 @@ export function Sidebar() {
             const duplicate = await localBridge.duplicateJsonWorkspace(workspace.id)
             await refreshJson()
             navigate(`/json/${duplicate.id}`)
-          })}{item('移入垃圾箱', async () => {
+          })}{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('移入垃圾箱', async () => {
             if (!window.confirm(`将 ${workspace.title} 移入垃圾箱？`)) return
             await localBridge.trashJsonWorkspace(workspace.id)
             await refreshJson()
@@ -140,14 +209,20 @@ export function Sidebar() {
       <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}>{markdownOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}<FileText size={16} /><span>Markdown</span></button>
-          <Menu triggerLabel="Markdown 操作">{item('添加扫描目录', addMarkdownSource)}{item('刷新全部目录', refreshMarkdown)}</Menu>
+          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><FileText size={16} /><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <Menu triggerLabel="添加 Markdown 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空文档', () => { void createManagedDocument() })}{item('添加文件夹', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
         </div>
-        {markdownOpen && <div className="nav-children">{markdownTrees.map((source) => {
+        {markdownOpen && <div className="nav-children">{managedMarkdown && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
           const collapsed = settings?.sidebar.collapsedGroups.includes(`markdown-source:${source.id}`) ?? false
+          const displayName = source.note?.trim() || source.label
           return <div className="source-tree" key={source.id}>
-          <div className="source-title"><button className="source-toggle" aria-expanded={!collapsed} onClick={() => toggleMarkdownSource(source.id)}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}<span title={source.path}>{source.label}</span></button><Menu>{item('刷新', refreshMarkdown)}{item('移除扫描目录', async () => {
-            if (!window.confirm(`移除扫描目录 ${source.label}？原文件不会删除。`)) return
+          <div className="source-title"><button className="source-toggle" aria-expanded={!collapsed} onClick={() => toggleMarkdownSource(source.id)}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}<span title={source.path}>{displayName}</span></button><Menu>{item('修改备注名', async () => {
+            const note = window.prompt('扫描目录备注名，留空则显示文件夹名', source.note ?? '')
+            if (note === null) return
+            await localBridge.updateMarkdownSourceNote(source.id, note)
+            await refreshMarkdown()
+          })}{item('刷新扫描', refreshMarkdown)}{item('打开文件所在位置', () => { void localBridge.revealMarkdownSource(source.id) })}{item('移除扫描目录', async () => {
+            if (!window.confirm(`移除扫描目录 ${displayName}？原文件不会删除。`)) return
             await localBridge.removeMarkdownSource(source.id)
             await refreshMarkdown()
           }, true)}</Menu></div>

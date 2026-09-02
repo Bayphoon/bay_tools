@@ -11,10 +11,12 @@ export function ClockPanel({ settings }: { settings: AppSettings }) {
     return () => window.clearInterval(timer)
   }, [])
   const status = getWorkStatus(date, settings.workSchedule)
-  return <div className="clock-panel">
-    <Clock3 size={18} />
+  return <section className="dashboard-card home-summary-card clock-panel">
+    <div className="home-card-heading"><h2>当前时间</h2><Clock3 size={16} /></div>
     <div className="clock-current"><strong>{formatLocal(date)}</strong></div>
-    <div className="clock-divider" />
-    <div><span>{status.label}</span><strong>{status.value}</strong>{status.secondary && <small>{status.secondary}</small>}</div>
-  </div>
+    <div className="home-card-result clock-status">
+      <div className="home-result-text"><span>{status.label}</span><strong>{status.value}</strong></div>
+      {status.secondary && <small>{status.secondary}</small>}
+    </div>
+  </section>
 }

@@ -81,6 +81,8 @@ describe('BayToolsStore', () => {
     await writeFile(join(docs, 'guide', 'readme.md'), '# Hello', 'utf8')
     await writeFile(join(docs, '.git', 'ignored.md'), 'ignored', 'utf8')
     const source = await store.addMarkdownSource(docs)
+    const noted = await store.updateMarkdownSourceNote(source.id, '项目文档')
+    expect(noted.note).toBe('项目文档')
     const tree = await store.scanMarkdownSources()
     expect(tree[0]?.children[0]?.name).toBe('guide')
     const document = await store.getMarkdownDocument(source.id, 'guide/readme.md')
@@ -89,6 +91,24 @@ describe('BayToolsStore', () => {
     expect(await readFile(join(docs, 'guide', 'readme.md'), 'utf8').catch(() => null)).toBeNull()
     await store.restoreTrash((await store.listTrash())[0]!.id)
     expect(await readFile(join(docs, 'guide', 'readme.md'), 'utf8')).toBe('# Updated')
+  })
+
+  it('creates folders and auto-save ready managed Markdown documents', async () => {
+    const folder = await store.createManagedMarkdownFolder('接口记录')
+    const document = await store.createManagedMarkdownDocument('登录接口', folder.id)
+    const saved = await store.updateManagedMarkdownDocument({ ...document, content: '# 登录\n\n成功。' })
+    expect((await store.getManagedMarkdownDocument(saved.id)).content).toContain('成功')
+    await expect(store.deleteManagedMarkdownFolder(folder.id)).rejects.toMatchObject({ code: 'FOLDER_NOT_EMPTY' })
+
+    const duplicate = await store.duplicateManagedMarkdownDocument(saved.id)
+    expect(duplicate.title).toBe('登录接口 副本')
+    expect(duplicate.content).toBe(saved.content)
+
+    await store.trashManagedMarkdownDocument(saved.id)
+    expect((await store.getManagedMarkdownLibrary()).documents.some((item) => item.id === saved.id)).toBe(false)
+    const trash = (await store.listTrash()).find((item) => item.kind === 'managed-markdown')!
+    await store.restoreTrash(trash.id)
+    expect((await store.getManagedMarkdownDocument(saved.id)).content).toBe(saved.content)
   })
 
   it('rejects traversal and markdown write conflicts', async () => {

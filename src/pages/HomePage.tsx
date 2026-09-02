@@ -14,11 +14,15 @@ function TimestampMini() {
   const result = useMemo(() => {
     try { return { ok: true as const, value: parseTimestamp(input) } } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : '转换失败' } }
   }, [input])
-  return <section className="dashboard-card timestamp-mini-card">
-    <div className="timestamp-mini-title"><h2>Timestamp</h2></div>
-    <input className="field mono" value={input} onChange={(event) => setInput(event.target.value)} aria-label="Timestamp" />
-    {result.ok ? <div className="output-line timestamp-mini-output"><strong>{result.value.local}</strong><CopyButton value={result.value.local} /></div> : <InlineError>{result.error}</InlineError>}
-    {result.ok && <span className="status-badge">按{result.value.detectedUnit === 'seconds' ? '秒' : '毫秒'}</span>}
+  return <section className="dashboard-card home-summary-card timestamp-mini-card">
+    <div className="home-card-heading"><h2>Timestamp</h2></div>
+    <div className="home-card-input">
+      <input className="field mono" value={input} onChange={(event) => setInput(event.target.value)} aria-label="Timestamp" />
+    </div>
+    {result.ok ? <div className="home-card-result">
+      <div className="home-result-text"><strong>{result.value.local}</strong><span>按{result.value.detectedUnit === 'seconds' ? '秒' : '毫秒'}识别</span></div>
+      <CopyButton value={result.value.local} />
+    </div> : <InlineError>{result.error}</InlineError>}
   </section>
 }
 
@@ -28,10 +32,10 @@ function ColorMini() {
   const result = useMemo(() => {
     try { return { ok: true as const, value: convertColor(input, kind) } } catch (error) { return { ok: false as const, error: error instanceof Error ? error.message : '转换失败' } }
   }, [input, kind])
-  return <section className="dashboard-card home-color-card">
-    <div className="card-heading"><div><h2>颜色转换</h2></div>{result.ok && <div className="color-chip" style={{ background: result.value.hex }} />}</div>
-    <div className="inline-fields"><select className="select" value={kind} onChange={(event) => setKind(event.target.value as ColorInputKind)}><option value="hex">HEX</option><option value="rgb255">RGB 255</option><option value="rgb1">RGB 1</option></select><input className="field mono" value={input} onChange={(event) => setInput(event.target.value)} /></div>
-    {result.ok ? <div className="mini-color-values"><span>{result.value.rgb255}</span><span>{result.value.rgb1}</span></div> : <InlineError>{result.error}</InlineError>}
+  return <section className="dashboard-card home-summary-card home-color-card">
+    <div className="home-card-heading"><h2>颜色转换</h2></div>
+    <div className="home-card-input"><select className="select" value={kind} onChange={(event) => setKind(event.target.value as ColorInputKind)}><option value="hex">HEX</option><option value="rgb255">RGB 255</option><option value="rgb1">RGB 1</option></select><input className="field mono" value={input} onChange={(event) => setInput(event.target.value)} /></div>
+    {result.ok ? <div className="home-card-result color-mini-result"><div className="mini-color-values"><span>{result.value.rgb255}</span><span>{result.value.rgb1}</span></div><div className="color-chip" style={{ background: result.value.hex }} /></div> : <InlineError>{result.error}</InlineError>}
   </section>
 }
 

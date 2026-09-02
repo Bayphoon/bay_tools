@@ -15,7 +15,7 @@ export default function App() {
   const { ready, error, settings, bootstrap } = useAppStore()
   useEffect(() => { void bootstrap() }, [bootstrap])
   useTheme(settings)
-  if (!ready) return <div className="startup"><div className="brand-mark large">B</div><Spinner label="正在启动 BayTools" /></div>
+  if (!ready) return <div className="startup"><img className="brand-icon large" src="/baytools-icon.png" alt="" /><Spinner label="正在启动 BayTools" /></div>
   if (error || !settings) return <div className="startup error"><h1>BayTools 无法启动</h1><p>{error ?? '设置加载失败'}</p><button onClick={() => location.reload()}>重试</button></div>
   return <Suspense fallback={<Spinner label="正在加载工具" />}><Routes>
     <Route element={<AppLayout />}>
@@ -24,6 +24,7 @@ export default function App() {
       <Route path="color" element={<ColorPage />} />
       <Route path="json/:id" element={<JsonWorkspacePage />} />
       <Route path="markdown" element={<MarkdownPage />} />
+      <Route path="markdown/document/:documentId" element={<MarkdownPage />} />
       <Route path="markdown/:sourceId" element={<MarkdownPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

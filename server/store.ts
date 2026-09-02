@@ -19,6 +19,10 @@ import type {
   JsonViewMode,
   JsonWorkspace,
   JsonWorkspaceSummary,
+  ManagedMarkdownDocument,
+  ManagedMarkdownDocumentSummary,
+  ManagedMarkdownFolder,
+  ManagedMarkdownLibrary,
   MarkdownDocument,
   MarkdownSource,
   MarkdownSourceTree,
@@ -179,6 +183,8 @@ export class BayToolsStore {
   private readonly savedColorsPath: string
   private readonly markdownSourcesPath: string
   private readonly markdownUiPath: string
+  private readonly managedMarkdownIndexPath: string
+  private readonly managedMarkdownFilesRoot: string
   private readonly trashIndexPath: string
   private readonly trashItemsRoot: string
 
@@ -192,6 +198,8 @@ export class BayToolsStore {
     this.savedColorsPath = join(this.docRoot, 'color', 'saved.json')
     this.markdownSourcesPath = join(this.docRoot, 'markdown', 'sources.json')
     this.markdownUiPath = join(this.docRoot, 'markdown', 'ui-state.json')
+    this.managedMarkdownIndexPath = join(this.docRoot, 'markdown', 'documents', 'index.json')
+    this.managedMarkdownFilesRoot = join(this.docRoot, 'markdown', 'documents', 'files')
     this.trashIndexPath = join(this.docRoot, 'trash', 'index.json')
     this.trashItemsRoot = join(this.docRoot, 'trash', 'items')
   }
@@ -202,6 +210,7 @@ export class BayToolsStore {
       mkdir(this.trashItemsRoot, { recursive: true }),
       mkdir(dirname(this.recentColorsPath), { recursive: true }),
       mkdir(dirname(this.markdownSourcesPath), { recursive: true }),
+      mkdir(this.managedMarkdownFilesRoot, { recursive: true }),
     ])
     await recoverAtomicArtifacts(this.docRoot)
     await this.ensureJson(this.settingsPath, defaultSettings())
@@ -210,6 +219,7 @@ export class BayToolsStore {
     await this.ensureJson(this.savedColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, saved: [] })
     await this.ensureJson(this.markdownSourcesPath, { schemaVersion: 1, updatedAt: now(), revision: 1, sources: [] } satisfies MarkdownSourceFile)
     await this.ensureJson(this.markdownUiPath, { schemaVersion: 1, updatedAt: now(), revision: 1, mode: 'split' } satisfies MarkdownUiState)
+    await this.ensureJson(this.managedMarkdownIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, folders: [], documents: [] } satisfies ManagedMarkdownLibrary)
     await this.ensureJson(this.trashIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies TrashIndex)
   }
 
@@ -272,6 +282,11 @@ export class BayToolsStore {
     const result = migrateJsonWorkspace(await readJson<JsonWorkspace | LegacyJsonWorkspace>(path))
     if (result.migrated) await writeJson(path, result.workspace)
     return result.workspace
+  }
+
+  async getJsonWorkspaceLocation(id: string): Promise<string> {
+    await this.getJsonWorkspace(id)
+    return this.workspacePath(id)
   }
 
   async updateJsonWorkspace(next: JsonWorkspace): Promise<JsonWorkspace> {
@@ -374,6 +389,18 @@ export class BayToolsStore {
     return source
   }
 
+  async updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource> {
+    const file = await readJson<MarkdownSourceFile>(this.markdownSourcesPath)
+    const position = file.sources.findIndex((source) => source.id === id)
+    if (position < 0) throw new AppError(404, 'SOURCE_NOT_FOUND', 'Markdown 扫描目录不存在')
+    const source = { ...file.sources[position]!, note: note.trim() || undefined }
+    file.sources[position] = source
+    file.revision += 1
+    file.updatedAt = now()
+    await writeJson(this.markdownSourcesPath, file)
+    return source
+  }
+
   async removeMarkdownSource(id: string): Promise<void> {
     const file = await readJson<MarkdownSourceFile>(this.markdownSourcesPath)
     file.sources = file.sources.filter((source) => source.id !== id)
@@ -394,10 +421,157 @@ export class BayToolsStore {
     return value
   }
 
+  async getManagedMarkdownLibrary(): Promise<ManagedMarkdownLibrary> {
+    return readJson<ManagedMarkdownLibrary>(this.managedMarkdownIndexPath)
+  }
+
+  private managedMarkdownDocumentPath(id: string): string {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError(400, 'INVALID_ID', 'Markdown 文档 ID 无效')
+    return join(this.managedMarkdownFilesRoot, `${id}.md`)
+  }
+
+  async createManagedMarkdownFolder(name = '未命名文件夹'): Promise<ManagedMarkdownFolder> {
+    const library = await this.getManagedMarkdownLibrary()
+    const createdAt = now()
+    const folder: ManagedMarkdownFolder = { id: randomUUID(), name: name.trim() || '未命名文件夹', createdAt, updatedAt: createdAt }
+    library.folders.push(folder)
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    return folder
+  }
+
+  async renameManagedMarkdownFolder(id: string, name: string): Promise<ManagedMarkdownFolder> {
+    const library = await this.getManagedMarkdownLibrary()
+    const position = library.folders.findIndex((folder) => folder.id === id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    const folder = { ...library.folders[position]!, name: name.trim() || library.folders[position]!.name, updatedAt: now() }
+    library.folders[position] = folder
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    return folder
+  }
+
+  async deleteManagedMarkdownFolder(id: string): Promise<void> {
+    const library = await this.getManagedMarkdownLibrary()
+    if (library.documents.some((document) => document.folderId === id)) {
+      throw new AppError(409, 'FOLDER_NOT_EMPTY', '文件夹中还有 Markdown 文档')
+    }
+    if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    library.folders = library.folders.filter((folder) => folder.id !== id)
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+  }
+
+  async createManagedMarkdownDocument(title = '未命名 Markdown', folderId?: string): Promise<ManagedMarkdownDocument> {
+    const library = await this.getManagedMarkdownLibrary()
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
+    const createdAt = now()
+    const summary: ManagedMarkdownDocumentSummary = {
+      id: randomUUID(),
+      title: title.trim() || '未命名 Markdown',
+      ...(folderId ? { folderId } : {}),
+      createdAt,
+      updatedAt: createdAt,
+      revision: 1,
+    }
+    await atomicWrite(this.managedMarkdownDocumentPath(summary.id), '')
+    library.documents.push(summary)
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    return { ...summary, content: '' }
+  }
+
+  async getManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument> {
+    const library = await this.getManagedMarkdownLibrary()
+    const summary = library.documents.find((document) => document.id === id)
+    if (!summary) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
+    const path = this.managedMarkdownDocumentPath(id)
+    if (!(await exists(path))) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档文件不存在')
+    return { ...summary, content: await readFile(path, 'utf8') }
+  }
+
+  async updateManagedMarkdownDocument(next: ManagedMarkdownDocument): Promise<ManagedMarkdownDocument> {
+    const library = await this.getManagedMarkdownLibrary()
+    const position = library.documents.findIndex((document) => document.id === next.id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
+    const current = library.documents[position]!
+    if (current.revision !== next.revision) throw new ConflictError('Markdown 文档已在其他窗口中修改', await this.getManagedMarkdownDocument(next.id))
+    if (next.folderId && !library.folders.some((folder) => folder.id === next.folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
+    const summary: ManagedMarkdownDocumentSummary = {
+      id: current.id,
+      title: next.title.trim() || current.title,
+      ...(next.folderId ? { folderId: next.folderId } : {}),
+      createdAt: current.createdAt,
+      updatedAt: now(),
+      revision: current.revision + 1,
+    }
+    await atomicWrite(this.managedMarkdownDocumentPath(next.id), next.content)
+    library.documents[position] = summary
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    return { ...summary, content: next.content }
+  }
+
+  async duplicateManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument> {
+    const source = await this.getManagedMarkdownDocument(id)
+    const duplicate = await this.createManagedMarkdownDocument(`${source.title} 副本`, source.folderId)
+    return this.updateManagedMarkdownDocument({ ...duplicate, content: source.content })
+  }
+
+  async getManagedMarkdownDocumentLocation(id: string): Promise<string> {
+    await this.getManagedMarkdownDocument(id)
+    return this.managedMarkdownDocumentPath(id)
+  }
+
+  async trashManagedMarkdownDocument(id: string): Promise<void> {
+    const document = await this.getManagedMarkdownDocument(id)
+    const library = await this.getManagedMarkdownLibrary()
+    const source = this.managedMarkdownDocumentPath(id)
+    const itemId = randomUUID()
+    const itemRoot = join(this.trashItemsRoot, itemId)
+    await mkdir(itemRoot, { recursive: true })
+    const payload = join(itemRoot, 'payload.md')
+    await rename(source, payload)
+    const buffer = await readFile(payload)
+    const managedDocument: ManagedMarkdownDocumentSummary = {
+      id: document.id,
+      title: document.title,
+      ...(document.folderId ? { folderId: document.folderId } : {}),
+      createdAt: document.createdAt,
+      updatedAt: document.updatedAt,
+      revision: document.revision,
+    }
+    const item: TrashItem = {
+      id: itemId,
+      kind: 'managed-markdown',
+      displayName: document.title,
+      originalLocation: source,
+      managedDocument,
+      deletedAt: now(),
+      size: buffer.byteLength,
+      sha256: hashBuffer(buffer),
+    }
+    await writeJson(join(itemRoot, 'metadata.json'), item)
+    library.documents = library.documents.filter((entry) => entry.id !== id)
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    await this.addTrashItem(item)
+  }
+
   private async sourceById(id: string): Promise<MarkdownSource> {
     const source = (await this.listMarkdownSources()).find((value) => value.id === id)
     if (!source) throw new AppError(404, 'SOURCE_NOT_FOUND', 'Markdown 扫描目录不存在')
     return source
+  }
+
+  async getMarkdownSourceLocation(id: string): Promise<string> {
+    return (await this.sourceById(id)).path
   }
 
   async scanMarkdownSources(): Promise<MarkdownSourceTree[]> {
@@ -446,6 +620,10 @@ export class BayToolsStore {
     const content = await readFile(resolved.fullPath, 'utf8')
     const info = await stat(resolved.fullPath)
     return { sourceId, relativePath: ensureSafeRelative(relativePath), content, hash: hashBuffer(content), updatedAt: info.mtime.toISOString() }
+  }
+
+  async getMarkdownDocumentLocation(sourceId: string, relativePath: string): Promise<string> {
+    return (await this.resolveSourcePath(sourceId, relativePath, '.md')).fullPath
   }
 
   async saveMarkdownDocument(document: MarkdownDocument): Promise<MarkdownDocument> {
@@ -543,6 +721,40 @@ export class BayToolsStore {
       }
       await this.removeTrashItem(index, item)
       return { restoredLocation: target, workspaceId: restored.id }
+    }
+
+    if (item.kind === 'managed-markdown') {
+      if (!item.managedDocument) throw new AppError(500, 'INVALID_TRASH_ITEM', 'Markdown 垃圾项缺少文档信息')
+      const payload = join(itemRoot, 'payload.md')
+      const content = await readFile(payload, 'utf8')
+      const library = await this.getManagedMarkdownLibrary()
+      const target = this.managedMarkdownDocumentPath(item.managedDocument.id)
+      if (await exists(target) || library.documents.some((document) => document.id === item.managedDocument!.id)) {
+        if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID Markdown 文档已经存在')
+        const folderId = item.managedDocument.folderId && library.folders.some((folder) => folder.id === item.managedDocument!.folderId)
+          ? item.managedDocument.folderId
+          : undefined
+        const created = await this.createManagedMarkdownDocument(`${item.managedDocument.title}（已恢复）`, folderId)
+        const restored = await this.updateManagedMarkdownDocument({ ...created, content })
+        await this.removeTrashItem(index, item)
+        return { restoredLocation: this.managedMarkdownDocumentPath(restored.id) }
+      }
+      const folderId = item.managedDocument.folderId && library.folders.some((folder) => folder.id === item.managedDocument!.folderId)
+        ? item.managedDocument.folderId
+        : undefined
+      const restored: ManagedMarkdownDocumentSummary = { ...item.managedDocument, ...(folderId ? { folderId } : {}), updatedAt: now() }
+      if (!folderId) delete restored.folderId
+      await copyFile(payload, target)
+      if (hashBuffer(await readFile(target)) !== item.sha256) {
+        await rm(target, { force: true })
+        throw new AppError(500, 'RESTORE_VERIFY_FAILED', '恢复文件校验失败')
+      }
+      library.documents.push(restored)
+      library.revision += 1
+      library.updatedAt = now()
+      await writeJson(this.managedMarkdownIndexPath, library)
+      await this.removeTrashItem(index, item)
+      return { restoredLocation: target }
     }
 
     const payload = join(itemRoot, 'payload.md')

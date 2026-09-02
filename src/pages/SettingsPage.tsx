@@ -14,6 +14,7 @@ export function SettingsPage() {
   const saveSettings = useAppStore((state) => state.saveSettings)
   const refreshJson = useAppStore((state) => state.refreshJson)
   const refreshMarkdown = useAppStore((state) => state.refreshMarkdown)
+  const refreshManagedMarkdown = useAppStore((state) => state.refreshManagedMarkdown)
   const [draft, setDraft] = useState<AppSettings>(settings)
   const [trash, setTrash] = useState<TrashItem[]>([])
   const [error, setError] = useState('')
@@ -34,7 +35,7 @@ export function SettingsPage() {
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
     try {
       const result = await localBridge.restoreTrash(item.id, asCopy, targetDirectory)
-      await Promise.all([loadTrash(), refreshJson(), refreshMarkdown()])
+      await Promise.all([loadTrash(), refreshJson(), refreshMarkdown(), refreshManagedMarkdown()])
       setError(`已恢复到 ${result.restoredLocation}`)
     } catch (value) {
       if (value instanceof ApiError && value.code === 'RESTORE_CONFLICT') {
@@ -65,7 +66,7 @@ export function SettingsPage() {
       <Tabs.Content value="trash" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>
         <InlineError>{error}</InlineError>
-        {!trash.length ? <EmptyState title="垃圾箱是空的">删除的 JSON 工作区和 Markdown 文件会出现在这里。</EmptyState> : <div className="trash-list">{trash.map((item) => <article className="trash-item" key={item.id}><div className={`trash-kind ${item.kind}`}>{item.kind === 'markdown' ? 'MD' : '{}'}</div><div className="trash-main"><strong>{item.displayName}</strong><span className="mono" title={item.originalLocation}>{item.originalLocation}</span><small>{new Date(item.deletedAt).toLocaleString()} · {formatSize(item.size)}</small></div><ToolButton onClick={() => restore(item)}><RotateCcw size={14} />恢复</ToolButton><ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除 ${item.displayName}？此操作无法撤销。`)) return; await localBridge.deleteTrash(item.id); await loadTrash() }}><Trash2 size={14} />彻底删除</ToolButton></article>)}</div>}
+        {!trash.length ? <EmptyState title="垃圾箱是空的">删除的 JSON 工作区和 Markdown 文件会出现在这里。</EmptyState> : <div className="trash-list">{trash.map((item) => <article className="trash-item" key={item.id}><div className={`trash-kind ${item.kind}`}>{item.kind === 'json-workspace' ? '{}' : 'MD'}</div><div className="trash-main"><strong>{item.displayName}</strong><span className="mono" title={item.originalLocation}>{item.originalLocation}</span><small>{new Date(item.deletedAt).toLocaleString()} · {formatSize(item.size)}</small></div><ToolButton onClick={() => restore(item)}><RotateCcw size={14} />恢复</ToolButton><ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除 ${item.displayName}？此操作无法撤销。`)) return; await localBridge.deleteTrash(item.id); await loadTrash() }}><Trash2 size={14} />彻底删除</ToolButton></article>)}</div>}
       </Tabs.Content>
     </Tabs.Root>
   </div>

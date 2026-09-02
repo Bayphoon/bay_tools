@@ -1,10 +1,10 @@
 import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { randomBytes } from 'node:crypto'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import openBrowser from 'open'
-import type { AppSettings, ColorState, JsonWorkspace, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
+import type { AppSettings, ColorState, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { BayToolsStore } from './store.js'
 import { selectWindowsFolder } from './folderDialog.js'
@@ -24,6 +24,11 @@ function allowedHost(value?: string): boolean {
 
 function allowedOrigin(value?: string): boolean {
   return !value || /^http:\/\/(127\.0\.0\.1|localhost):(4319|5173)$/i.test(value)
+}
+
+async function revealInExplorer(path: string, selectFile: boolean): Promise<void> {
+  if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '文件位置功能当前仅支持 Windows')
+  await openBrowser(selectFile ? dirname(path) : path, { wait: false })
 }
 
 app.addHook('onRequest', async (request) => {
@@ -58,6 +63,10 @@ app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/trash', async (re
   await store.trashJsonWorkspace(request.params.id)
   return reply.status(204).send()
 })
+app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/reveal', async (request, reply) => {
+  await revealInExplorer(await store.getJsonWorkspaceLocation(request.params.id), true)
+  return reply.status(204).send()
+})
 
 app.get('/api/colors', async () => store.getColors())
 app.put<{ Body: ColorState }>('/api/colors', async (request) => store.updateColors(request.body))
@@ -72,8 +81,13 @@ app.get('/api/markdown/sources', async () => store.listMarkdownSources())
 app.get('/api/markdown/ui-state', async () => store.getMarkdownUiState())
 app.put<{ Body: MarkdownUiState }>('/api/markdown/ui-state', async (request) => store.updateMarkdownUiState(request.body))
 app.post<{ Body: { path: string } }>('/api/markdown/sources', async (request) => store.addMarkdownSource(request.body.path))
+app.patch<{ Params: { id: string }; Body: { note: string } }>('/api/markdown/sources/:id', async (request) => store.updateMarkdownSourceNote(request.params.id, request.body.note))
 app.delete<{ Params: { id: string } }>('/api/markdown/sources/:id', async (request, reply) => {
   await store.removeMarkdownSource(request.params.id)
+  return reply.status(204).send()
+})
+app.post<{ Params: { id: string } }>('/api/markdown/sources/:id/reveal', async (request, reply) => {
+  await revealInExplorer(await store.getMarkdownSourceLocation(request.params.id), false)
   return reply.status(204).send()
 })
 app.get('/api/markdown/tree', async () => store.scanMarkdownSources())
@@ -85,6 +99,33 @@ app.post<{ Body: { sourceId: string; path: string; nextName: string; hash: strin
 })
 app.post<{ Body: { sourceId: string; path: string; hash: string } }>('/api/markdown/document/trash', async (request, reply) => {
   await store.trashMarkdownDocument(request.body.sourceId, request.body.path, request.body.hash)
+  return reply.status(204).send()
+})
+app.post<{ Body: { sourceId: string; path: string } }>('/api/markdown/document/reveal', async (request, reply) => {
+  await revealInExplorer(await store.getMarkdownDocumentLocation(request.body.sourceId, request.body.path), true)
+  return reply.status(204).send()
+})
+
+app.get('/api/markdown/managed', async () => store.getManagedMarkdownLibrary())
+app.post<{ Body: { title?: string; folderId?: string } }>('/api/markdown/managed/documents', async (request) => store.createManagedMarkdownDocument(request.body?.title, request.body?.folderId))
+app.get<{ Params: { id: string } }>('/api/markdown/managed/documents/:id', async (request) => store.getManagedMarkdownDocument(request.params.id))
+app.put<{ Params: { id: string }; Body: ManagedMarkdownDocument }>('/api/markdown/managed/documents/:id', async (request) => {
+  if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', 'Markdown 文档 ID 不匹配')
+  return store.updateManagedMarkdownDocument(request.body)
+})
+app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/duplicate', async (request) => store.duplicateManagedMarkdownDocument(request.params.id))
+app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/trash', async (request, reply) => {
+  await store.trashManagedMarkdownDocument(request.params.id)
+  return reply.status(204).send()
+})
+app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/reveal', async (request, reply) => {
+  await revealInExplorer(await store.getManagedMarkdownDocumentLocation(request.params.id), true)
+  return reply.status(204).send()
+})
+app.post<{ Body: { name?: string } }>('/api/markdown/managed/folders', async (request) => store.createManagedMarkdownFolder(request.body?.name))
+app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/markdown/managed/folders/:id', async (request) => store.renameManagedMarkdownFolder(request.params.id, request.body.name))
+app.delete<{ Params: { id: string } }>('/api/markdown/managed/folders/:id', async (request, reply) => {
+  await store.deleteManagedMarkdownFolder(request.params.id)
   return reply.status(204).send()
 })
 

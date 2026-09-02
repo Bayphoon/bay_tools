@@ -1,5 +1,5 @@
 import Editor from '@monaco-editor/react'
-import { Eye, FileCode2, FolderPlus, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
+import { Eye, FileCode2, FolderOpen, FolderPlus, Pencil, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -7,12 +7,17 @@ import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
-import type { MarkdownDocument, MarkdownUiState } from '../../shared/types'
+import type { MarkdownDocument, MarkdownSourceTree, MarkdownUiState } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { ApiError, assetUrl, localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
+import { ManagedMarkdownPage } from './ManagedMarkdownPage'
 
 type MarkdownMode = 'source' | 'preview' | 'split'
+
+function countMarkdownFiles(nodes: MarkdownSourceTree['children']): number {
+  return nodes.reduce((count, node) => count + (node.type === 'file' ? 1 : countMarkdownFiles(node.children ?? [])), 0)
+}
 
 function resolveRelative(documentPath: string, source: string): string {
   const base = documentPath.split('/').slice(0, -1).join('/')
@@ -46,7 +51,7 @@ function MarkdownPreview({ sourceId, documentPath, content }: { sourceId: string
   return <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={components}>{content}</ReactMarkdown></article>
 }
 
-export function MarkdownPage() {
+function ExternalMarkdownPage() {
   const { sourceId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const path = searchParams.get('path') ?? ''
@@ -107,6 +112,18 @@ export function MarkdownPage() {
     await localBridge.addMarkdownSource(selected)
     await refreshMarkdown()
   }
+  const editSourceNote = async (source: MarkdownSourceTree) => {
+    const note = window.prompt('扫描目录备注名，留空则显示文件夹名', source.note ?? '')
+    if (note === null) return
+    await localBridge.updateMarkdownSourceNote(source.id, note)
+    await refreshMarkdown()
+  }
+  const removeSource = async (source: MarkdownSourceTree) => {
+    const displayName = source.note?.trim() || source.label
+    if (!window.confirm(`移除扫描目录 ${displayName}？原文件不会删除。`)) return
+    await localBridge.removeMarkdownSource(source.id)
+    await refreshMarkdown()
+  }
   const renameDocument = async () => {
     if (!document) return
     if (dirty && !window.confirm('重命名前将丢弃未保存修改，继续吗？')) return
@@ -126,12 +143,15 @@ export function MarkdownPage() {
     } catch (value) { setError(value instanceof Error ? value.message : '删除失败') }
   }
 
-  if (!sourceId || !path) return <div className="page"><PageHeader title="Markdown 阅读器" description="扫描本地目录，编辑并实时预览 Markdown" actions={<><ToolButton onClick={refreshMarkdown}><RefreshCw size={14} />刷新</ToolButton><ToolButton className="primary" onClick={addSource}><FolderPlus size={14} />添加目录</ToolButton></>} />
-    {!markdownTrees.length ? <EmptyState title="还没有扫描目录">添加一个包含 Markdown 文件的本地目录。<div><ToolButton className="primary" onClick={addSource}>选择目录</ToolButton></div></EmptyState> : <div className="source-overview">{markdownTrees.map((source) => <section className="source-overview-card" key={source.id}><strong>{source.label}</strong><span className="mono">{source.path}</span><small>{source.error ?? `${source.children.length} 个顶层条目`}</small></section>)}</div>}
+  if (!sourceId || !path) return <div className="page"><PageHeader title="Markdown 阅读器" description="管理 BayTools 文档和本地扫描目录" actions={<><ToolButton onClick={refreshMarkdown}><RefreshCw size={14} />刷新扫描</ToolButton><ToolButton className="primary" onClick={addSource}><FolderPlus size={14} />添加扫描目录</ToolButton></>} />
+    {!markdownTrees.length ? <EmptyState title="还没有扫描目录">可以从左侧 Markdown 的“＋”菜单添加空文档、文件夹或扫描目录。<div><ToolButton className="primary" onClick={addSource}>选择扫描目录</ToolButton></div></EmptyState> : <div className="source-overview">{markdownTrees.map((source) => {
+      const displayName = source.note?.trim() || source.label
+      return <section className="source-overview-card" key={source.id}><div className="source-overview-icon"><FolderOpen size={21} /></div><div className="source-overview-main"><button className="source-note-button" onClick={() => editSourceNote(source)} title="点击修改备注名"><strong>{displayName}</strong><Pencil size={12} /></button><span>文件夹名：{source.label}</span><code title={source.path}>{source.path}</code><small>{source.error ?? `扫描到 ${countMarkdownFiles(source.children)} 个 Markdown 文档`}</small></div><div className="source-overview-actions"><ToolButton onClick={() => refreshMarkdown()}><RefreshCw size={14} />刷新扫描</ToolButton><ToolButton onClick={() => localBridge.revealMarkdownSource(source.id)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={() => editSourceNote(source)}><Pencil size={14} />修改备注</ToolButton><ToolButton className="danger" onClick={() => removeSource(source)}><Trash2 size={14} />移除目录</ToolButton></div></section>
+    })}</div>}
   </div>
   if (!document) return <div className="page"><PageHeader title={path.split('/').at(-1) ?? 'Markdown'} /><Spinner label={error || '正在读取文件'} /></div>
   return <div className="page full-height-page markdown-page">
-    <PageHeader title={path.split('/').at(-1) ?? 'Markdown'} description={path} actions={<><div className="save-status"><span className={`save-dot ${status}`} />{dirty ? '未保存' : status === 'saved' ? '已保存' : status === 'conflict' ? '文件冲突' : '磁盘文件'}</div><ToolButton onClick={renameDocument}>重命名</ToolButton><ToolButton className="danger" onClick={trashDocument}><Trash2 size={14} />删除</ToolButton><ToolButton className="primary" disabled={!dirty || status === 'saving'} onClick={save}><Save size={14} />保存</ToolButton></>} />
+    <PageHeader title={path.split('/').at(-1) ?? 'Markdown'} description={path} actions={<><div className="save-status"><span className={`save-dot ${status}`} />{dirty ? '未保存' : status === 'saved' ? '已保存' : status === 'conflict' ? '文件冲突' : '磁盘文件'}</div><ToolButton onClick={() => localBridge.revealMarkdownDocument(document.sourceId, document.relativePath)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={renameDocument}>重命名</ToolButton><ToolButton className="danger" onClick={trashDocument}><Trash2 size={14} />删除</ToolButton><ToolButton className="primary" disabled={!dirty || status === 'saving'} onClick={save}><Save size={14} />保存</ToolButton></>} />
     {status === 'conflict' && <div className="conflict-banner"><span>磁盘文件已经变化。重新加载会丢弃当前编辑内容。</span><ToolButton onClick={async () => { const value = await localBridge.getMarkdownDocument(document.sourceId, document.relativePath); setDocument(value); setContent(value.content); setDirty(false); setStatus('idle') }}>重新加载</ToolButton></div>}
     <div className="markdown-toolbar"><div className="segmented"><button className={mode === 'source' ? 'active' : ''} onClick={() => changeMode('source')}><FileCode2 size={14} />原文</button><button className={mode === 'preview' ? 'active' : ''} onClick={() => changeMode('preview')}><Eye size={14} />预览</button><button className={mode === 'split' ? 'active' : ''} onClick={() => changeMode('split')}><SplitSquareHorizontal size={14} />分屏</button></div><InlineError>{error}</InlineError></div>
     <div className={`markdown-workspace mode-${mode}`}>
@@ -139,4 +159,9 @@ export function MarkdownPage() {
       {mode !== 'source' && <MarkdownPreview sourceId={document.sourceId} documentPath={document.relativePath} content={content} />}
     </div>
   </div>
+}
+
+export function MarkdownPage() {
+  const { documentId } = useParams()
+  return documentId ? <ManagedMarkdownPage documentId={documentId} /> : <ExternalMarkdownPage />
 }

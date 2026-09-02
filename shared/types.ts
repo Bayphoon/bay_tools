@@ -84,6 +84,7 @@ export interface ColorState {
 export interface MarkdownSource {
   id: string
   label: string
+  note?: string
   path: string
   createdAt: string
 }
@@ -115,7 +116,35 @@ export interface MarkdownUiState {
   mode: 'source' | 'preview' | 'split'
 }
 
-export type TrashKind = 'markdown' | 'json-workspace'
+export interface ManagedMarkdownFolder {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ManagedMarkdownDocumentSummary {
+  id: string
+  title: string
+  folderId?: string
+  createdAt: string
+  updatedAt: string
+  revision: number
+}
+
+export interface ManagedMarkdownDocument extends ManagedMarkdownDocumentSummary {
+  content: string
+}
+
+export interface ManagedMarkdownLibrary {
+  schemaVersion: 1
+  updatedAt: string
+  revision: number
+  folders: ManagedMarkdownFolder[]
+  documents: ManagedMarkdownDocumentSummary[]
+}
+
+export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace'
 
 export interface TrashItem {
   id: string
@@ -124,6 +153,7 @@ export interface TrashItem {
   originalLocation: string
   originalRelativePath?: string
   sourceId?: string
+  managedDocument?: ManagedMarkdownDocumentSummary
   deletedAt: string
   size: number
   sha256: string
@@ -144,17 +174,31 @@ export interface LocalBridge {
   renameJsonWorkspace(id: string, title: string): Promise<JsonWorkspaceSummary>
   duplicateJsonWorkspace(id: string): Promise<JsonWorkspace>
   trashJsonWorkspace(id: string): Promise<void>
+  revealJsonWorkspace(id: string): Promise<void>
   getColors(): Promise<ColorState>
   updateColors(state: ColorState): Promise<ColorState>
   selectDirectory(): Promise<string | null>
   listMarkdownSources(): Promise<MarkdownSource[]>
   addMarkdownSource(path: string): Promise<MarkdownSource>
+  updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource>
   removeMarkdownSource(id: string): Promise<void>
+  revealMarkdownSource(id: string): Promise<void>
   scanMarkdownSources(): Promise<MarkdownSourceTree[]>
   getMarkdownDocument(sourceId: string, relativePath: string): Promise<MarkdownDocument>
   saveMarkdownDocument(document: MarkdownDocument): Promise<MarkdownDocument>
   renameMarkdownDocument(sourceId: string, relativePath: string, nextName: string, hash: string): Promise<MarkdownDocument>
   trashMarkdownDocument(sourceId: string, relativePath: string, hash: string): Promise<void>
+  revealMarkdownDocument(sourceId: string, relativePath: string): Promise<void>
+  getManagedMarkdownLibrary(): Promise<ManagedMarkdownLibrary>
+  createManagedMarkdownDocument(title?: string, folderId?: string): Promise<ManagedMarkdownDocument>
+  getManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
+  updateManagedMarkdownDocument(document: ManagedMarkdownDocument): Promise<ManagedMarkdownDocument>
+  duplicateManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
+  trashManagedMarkdownDocument(id: string): Promise<void>
+  revealManagedMarkdownDocument(id: string): Promise<void>
+  createManagedMarkdownFolder(name?: string): Promise<ManagedMarkdownFolder>
+  renameManagedMarkdownFolder(id: string, name: string): Promise<ManagedMarkdownFolder>
+  deleteManagedMarkdownFolder(id: string): Promise<void>
   getMarkdownUiState(): Promise<MarkdownUiState>
   updateMarkdownUiState(state: MarkdownUiState): Promise<MarkdownUiState>
   listTrash(): Promise<TrashItem[]>
