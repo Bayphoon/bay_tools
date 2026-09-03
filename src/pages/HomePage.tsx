@@ -40,15 +40,19 @@ function ColorMini() {
 }
 
 function JsonMini() {
-  const [text, setText] = useState('{\n  "project": "BayTools",\n  "local": true\n}')
-  const [mode, setMode] = useState<'text' | 'tree'>('text')
+  const scratchpad = useAppStore((state) => state.jsonScratchpad)!
+  const saveStatus = useAppStore((state) => state.jsonScratchpadSaveStatus)
+  const saveError = useAppStore((state) => state.jsonScratchpadSaveError)
+  const updateScratchpad = useAppStore((state) => state.updateJsonScratchpad)
   const [search, setSearch] = useState('')
-  const [autoFormat, setAutoFormat] = useState(false)
+  const { text, mode, autoFormat } = scratchpad
   const parsed = useMemo(() => { try { return { value: JSON.parse(text) as unknown } } catch (error) { return { error: error instanceof Error ? error.message : 'JSON 无效' } } }, [text])
+  const setText = (value: string) => updateScratchpad({ text: value })
   const format = () => { if ('value' in parsed) setText(JSON.stringify(parsed.value, null, 2)) }
+  const saveLabel = saveStatus === 'pending' ? '等待自动保存' : saveStatus === 'saving' ? '正在自动保存' : saveStatus === 'conflict' || saveStatus === 'error' ? (saveError ?? '自动保存失败') : '草稿已自动保存'
   useAutoFormatJson(text, autoFormat && mode === 'text', setText)
   return <section className="dashboard-card json-mini-card">
-    <div className="json-mini-toolbar"><div className="toolbar"><ToolButton onClick={() => setMode(mode === 'text' ? 'tree' : 'text')}>{mode === 'text' ? '树形查看' : '原文编辑'}</ToolButton><ToolButton onClick={format}>格式化</ToolButton><label className="json-auto-format"><input type="checkbox" checked={autoFormat} onChange={(event) => setAutoFormat(event.target.checked)} />自动格式化</label>{'value' in parsed && <span className="valid-state"><CheckCircle2 size={14} />有效</span>}</div><span className="json-mini-note">临时 JSON · 不保存</span></div>
+    <div className="json-mini-toolbar"><div className="toolbar"><ToolButton onClick={() => updateScratchpad({ mode: mode === 'text' ? 'tree' : 'text' })}>{mode === 'text' ? '树形查看' : '原文编辑'}</ToolButton><ToolButton onClick={format}>格式化</ToolButton><label className="json-auto-format"><input type="checkbox" checked={autoFormat} onChange={(event) => updateScratchpad({ autoFormat: event.target.checked })} />自动格式化</label>{'value' in parsed && <span className="valid-state"><CheckCircle2 size={14} />有效</span>}</div><span className={`json-mini-note ${saveStatus}`} title="保存在 Doc/json/home-scratchpad.json">{saveLabel}</span></div>
     {mode === 'text' ? <div className="scratch-monaco"><JsonTextEditor value={text} onChange={setText} /></div> : <div className="tree-panel"><label className="search-field"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索键或值" /></label><JsonTree text={text} search={search} /></div>}
     {'error' in parsed && <InlineError>{parsed.error}</InlineError>}
   </section>

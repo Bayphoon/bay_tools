@@ -25,6 +25,16 @@ describe('BayToolsStore', () => {
     expect(JSON.parse(await readFile(join(root, 'Doc', 'settings.json'), 'utf8')).schemaVersion).toBe(1)
   })
 
+  it('persists the home JSON scratchpad including incomplete JSON text', async () => {
+    const scratchpad = await store.getJsonScratchpad()
+    expect(scratchpad.mode).toBe('text')
+    const saved = await store.updateJsonScratchpad({ ...scratchpad, text: '{', mode: 'tree', autoFormat: true })
+    expect(saved.revision).toBe(scratchpad.revision + 1)
+    expect(await store.getJsonScratchpad()).toMatchObject({ text: '{', mode: 'tree', autoFormat: true })
+    expect(JSON.parse(await readFile(join(root, 'Doc', 'json', 'home-scratchpad.json'), 'utf8'))).toMatchObject({ schemaVersion: 1, text: '{' })
+    await expect(store.updateJsonScratchpad(scratchpad)).rejects.toBeInstanceOf(ConflictError)
+  })
+
   it('creates, trashes, and restores JSON workspaces', async () => {
     const workspace = await store.createJsonWorkspace('Compare')
     await store.trashJsonWorkspace(workspace.id)

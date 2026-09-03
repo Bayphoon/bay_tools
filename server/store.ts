@@ -16,6 +16,7 @@ import type {
   AppSettings,
   ColorState,
   JsonPane,
+  JsonScratchpad,
   JsonViewMode,
   JsonWorkspace,
   JsonWorkspaceSummary,
@@ -70,6 +71,17 @@ const hashBuffer = (value: Buffer | string) => createHash('sha256').update(value
 
 function createJsonPane(title: string, text = '{\n  \n}', view: JsonViewMode = 'text'): JsonPane {
   return { id: randomUUID(), title, text, view }
+}
+
+function defaultJsonScratchpad(): JsonScratchpad {
+  return {
+    schemaVersion: 1,
+    updatedAt: now(),
+    revision: 1,
+    text: '{\n  "project": "BayTools",\n  "local": true\n}',
+    mode: 'text',
+    autoFormat: false,
+  }
 }
 
 function migrateJsonWorkspace(value: JsonWorkspace | LegacyJsonWorkspace): { workspace: JsonWorkspace; migrated: boolean } {
@@ -178,6 +190,7 @@ export class BayToolsStore {
   readonly docRoot: string
   private readonly settingsPath: string
   private readonly jsonIndexPath: string
+  private readonly jsonScratchpadPath: string
   private readonly workspaceRoot: string
   private readonly recentColorsPath: string
   private readonly savedColorsPath: string
@@ -193,6 +206,7 @@ export class BayToolsStore {
     this.docRoot = join(root, 'Doc')
     this.settingsPath = join(this.docRoot, 'settings.json')
     this.jsonIndexPath = join(this.docRoot, 'json', 'index.json')
+    this.jsonScratchpadPath = join(this.docRoot, 'json', 'home-scratchpad.json')
     this.workspaceRoot = join(this.docRoot, 'json', 'workspaces')
     this.recentColorsPath = join(this.docRoot, 'color', 'recent.json')
     this.savedColorsPath = join(this.docRoot, 'color', 'saved.json')
@@ -215,6 +229,7 @@ export class BayToolsStore {
     await recoverAtomicArtifacts(this.docRoot)
     await this.ensureJson(this.settingsPath, defaultSettings())
     await this.ensureJson(this.jsonIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies JsonIndex)
+    await this.ensureJson(this.jsonScratchpadPath, defaultJsonScratchpad())
     await this.ensureJson(this.recentColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, recent: [] })
     await this.ensureJson(this.savedColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, saved: [] })
     await this.ensureJson(this.markdownSourcesPath, { schemaVersion: 1, updatedAt: now(), revision: 1, sources: [] } satisfies MarkdownSourceFile)
@@ -236,6 +251,25 @@ export class BayToolsStore {
     if (current.revision !== next.revision) throw new ConflictError('设置已在其他窗口中修改', current)
     const value = { ...next, schemaVersion: 1 as const, revision: next.revision + 1, updatedAt: now() }
     await writeJson(this.settingsPath, value)
+    return value
+  }
+
+  async getJsonScratchpad(): Promise<JsonScratchpad> {
+    const value = await readJson<JsonScratchpad>(this.jsonScratchpadPath)
+    if (value.schemaVersion !== 1 || typeof value.text !== 'string' || !['text', 'tree'].includes(value.mode) || typeof value.autoFormat !== 'boolean') {
+      throw new AppError(500, 'INVALID_JSON_SCRATCHPAD', '主页 JSON 草稿文件格式无效')
+    }
+    return value
+  }
+
+  async updateJsonScratchpad(next: JsonScratchpad): Promise<JsonScratchpad> {
+    const current = await this.getJsonScratchpad()
+    if (current.revision !== next.revision) throw new ConflictError('主页 JSON 草稿已在其他窗口中修改', current)
+    if (typeof next.text !== 'string' || !['text', 'tree'].includes(next.mode) || typeof next.autoFormat !== 'boolean') {
+      throw new AppError(400, 'INVALID_JSON_SCRATCHPAD', '主页 JSON 草稿内容或视图无效')
+    }
+    const value = { ...next, schemaVersion: 1 as const, revision: next.revision + 1, updatedAt: now() }
+    await writeJson(this.jsonScratchpadPath, value)
     return value
   }
 

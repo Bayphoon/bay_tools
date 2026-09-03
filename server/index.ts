@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import openBrowser from 'open'
-import type { AppSettings, ColorState, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
+import type { AppSettings, ColorState, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
 import { BayToolsStore } from './store.js'
@@ -13,7 +13,7 @@ import { selectWindowsFolder } from './folderDialog.js'
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
-const apiVersion = 4
+const apiVersion = 5
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -52,6 +52,9 @@ app.get('/api/session', async () => ({ token: sessionToken, apiVersion }))
 
 app.get('/api/settings', async () => store.getSettings())
 app.put<{ Body: AppSettings }>('/api/settings', async (request) => store.updateSettings(request.body))
+
+app.get('/api/json-scratchpad', async () => store.getJsonScratchpad())
+app.put<{ Body: JsonScratchpad }>('/api/json-scratchpad', async (request) => store.updateJsonScratchpad(request.body))
 
 app.get('/api/json-workspaces', async () => store.listJsonWorkspaces())
 app.post<{ Body: { title?: string } }>('/api/json-workspaces', async (request) => store.createJsonWorkspace(request.body?.title))

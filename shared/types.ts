@@ -57,6 +57,15 @@ export interface JsonWorkspace extends JsonWorkspaceSummary {
   diffSelection: JsonDiffSelection
 }
 
+export interface JsonScratchpad {
+  schemaVersion: 1
+  updatedAt: string
+  revision: number
+  text: string
+  mode: JsonViewMode
+  autoFormat: boolean
+}
+
 export interface ColorValue {
   hex: string
   rgb255: string
@@ -211,6 +220,8 @@ export interface LocalBridge {
   duplicateJsonWorkspace(id: string): Promise<JsonWorkspace>
   trashJsonWorkspace(id: string): Promise<void>
   revealJsonWorkspace(id: string): Promise<void>
+  getJsonScratchpad(): Promise<JsonScratchpad>
+  updateJsonScratchpad(scratchpad: JsonScratchpad): Promise<JsonScratchpad>
   getColors(): Promise<ColorState>
   updateColors(state: ColorState): Promise<ColorState>
   selectDirectory(): Promise<string | null>
