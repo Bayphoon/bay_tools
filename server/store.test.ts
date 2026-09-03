@@ -37,6 +37,7 @@ describe('BayToolsStore', () => {
 
   it('creates, trashes, and restores JSON workspaces', async () => {
     const workspace = await store.createJsonWorkspace('Compare')
+    expect(await store.getJsonWorkspaceLocation(workspace.id)).toBe(join(root, 'Doc', 'json', 'workspaces', `${workspace.id}.json`))
     await store.trashJsonWorkspace(workspace.id)
     expect(await store.listJsonWorkspaces()).toEqual([])
     const item = (await store.listTrash())[0]!
@@ -96,6 +97,7 @@ describe('BayToolsStore', () => {
     const tree = await store.scanMarkdownSources()
     expect(tree[0]?.children[0]?.name).toBe('guide')
     const document = await store.getMarkdownDocument(source.id, 'guide/readme.md')
+    expect(await store.getMarkdownDocumentLocation(source.id, document.relativePath)).toBe(join(source.path, 'guide', 'readme.md'))
     const saved = await store.saveMarkdownDocument({ ...document, content: '# Updated' })
     await store.trashMarkdownDocument(source.id, saved.relativePath, saved.hash)
     expect(await readFile(join(docs, 'guide', 'readme.md'), 'utf8').catch(() => null)).toBeNull()
@@ -106,6 +108,7 @@ describe('BayToolsStore', () => {
   it('creates folders and auto-save ready managed Markdown documents', async () => {
     const folder = await store.createManagedMarkdownFolder('接口记录')
     const document = await store.createManagedMarkdownDocument('登录接口', folder.id)
+    expect(await store.getManagedMarkdownDocumentLocation(document.id)).toBe(join(root, 'Doc', 'markdown', 'documents', 'files', `${document.id}.md`))
     const saved = await store.updateManagedMarkdownDocument({ ...document, content: '# 登录\n\n成功。' })
     expect((await store.getManagedMarkdownDocument(saved.id)).content).toContain('成功')
     await expect(store.deleteManagedMarkdownFolder(folder.id)).rejects.toMatchObject({ code: 'FOLDER_NOT_EMPTY' })

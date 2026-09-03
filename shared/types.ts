@@ -189,6 +189,23 @@ export interface LanguageEntryPage {
   totalPages: number
 }
 
+export interface ServerStatusRecord {
+  server_id: string
+  running_status: string
+  season_days: Record<string, number>
+  config_branch: string
+  code_branch: string
+}
+
+export interface ServerStatusState {
+  schemaVersion: 1
+  updatedAt: string
+  revision: number
+  url: string
+  lastSyncedAt?: string
+  servers: ServerStatusRecord[]
+}
+
 export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace'
 
 export interface TrashItem {
@@ -209,6 +226,14 @@ export interface RestoreResult {
   workspaceId?: string
 }
 
+export type ShortcutLocation = 'desktop' | 'start-menu'
+
+export interface ShortcutResult {
+  location: ShortcutLocation
+  path: string
+  replaced: boolean
+}
+
 export interface LocalBridge {
   getSettings(): Promise<AppSettings>
   updateSettings(settings: AppSettings): Promise<AppSettings>
@@ -220,11 +245,13 @@ export interface LocalBridge {
   duplicateJsonWorkspace(id: string): Promise<JsonWorkspace>
   trashJsonWorkspace(id: string): Promise<void>
   revealJsonWorkspace(id: string): Promise<void>
+  getJsonWorkspaceFilePath(id: string): Promise<string>
   getJsonScratchpad(): Promise<JsonScratchpad>
   updateJsonScratchpad(scratchpad: JsonScratchpad): Promise<JsonScratchpad>
   getColors(): Promise<ColorState>
   updateColors(state: ColorState): Promise<ColorState>
   selectDirectory(): Promise<string | null>
+  createShortcut(location: ShortcutLocation): Promise<ShortcutResult>
   listMarkdownSources(): Promise<MarkdownSource[]>
   addMarkdownSource(path: string): Promise<MarkdownSource>
   updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource>
@@ -236,6 +263,7 @@ export interface LocalBridge {
   renameMarkdownDocument(sourceId: string, relativePath: string, nextName: string, hash: string): Promise<MarkdownDocument>
   trashMarkdownDocument(sourceId: string, relativePath: string, hash: string): Promise<void>
   revealMarkdownDocument(sourceId: string, relativePath: string): Promise<void>
+  getMarkdownDocumentFilePath(sourceId: string, relativePath: string): Promise<string>
   getManagedMarkdownLibrary(): Promise<ManagedMarkdownLibrary>
   createManagedMarkdownDocument(title?: string, folderId?: string): Promise<ManagedMarkdownDocument>
   getManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
@@ -243,6 +271,7 @@ export interface LocalBridge {
   duplicateManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
   trashManagedMarkdownDocument(id: string): Promise<void>
   revealManagedMarkdownDocument(id: string): Promise<void>
+  getManagedMarkdownDocumentFilePath(id: string): Promise<string>
   createManagedMarkdownFolder(name?: string): Promise<ManagedMarkdownFolder>
   renameManagedMarkdownFolder(id: string, name: string): Promise<ManagedMarkdownFolder>
   deleteManagedMarkdownFolder(id: string): Promise<void>
@@ -256,6 +285,8 @@ export interface LocalBridge {
   searchLanguageEntries(id: string, search: string, page: number, mode: LanguageSearchMode): Promise<LanguageEntryPage>
   searchLanguageFavorites(id: string, search: string, page: number, mode: LanguageSearchMode): Promise<LanguageEntryPage>
   setLanguageFavorite(id: string, key: string, favorite: boolean, revision: number): Promise<LanguageSource>
+  getServerStatus(): Promise<ServerStatusState>
+  syncServerStatus(url: string): Promise<ServerStatusState>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>

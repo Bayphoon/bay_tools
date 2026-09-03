@@ -1,8 +1,9 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
+import { copyFilePath } from '../lib/clipboard'
 import { localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 
@@ -32,7 +33,7 @@ function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: st
       const renamed = await localBridge.renameMarkdownDocument(sourceId, node.relativePath, nextName, document.hash)
       await onChanged()
       navigate(`/markdown/${sourceId}?path=${encodeURIComponent(renamed.relativePath)}`)
-    })}{item('打开文件所在位置', () => { void localBridge.revealMarkdownDocument(sourceId, node.relativePath) })}{item('移入垃圾箱', async () => {
+    })}{item('打开文件所在位置', () => { void localBridge.revealMarkdownDocument(sourceId, node.relativePath) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getMarkdownDocumentFilePath(sourceId, node.relativePath)) })}{item('移入垃圾箱', async () => {
       if (!window.confirm(`将 ${node.name} 移入 BayTools 垃圾箱？`)) return
       const document = await localBridge.getMarkdownDocument(sourceId, node.relativePath)
       await localBridge.trashMarkdownDocument(sourceId, node.relativePath, document.hash)
@@ -57,7 +58,7 @@ function ManagedDocumentRow({ document, onChanged }: { document: ManagedMarkdown
       const duplicate = await localBridge.duplicateManagedMarkdownDocument(document.id)
       await onChanged()
       navigate(`/markdown/document/${duplicate.id}`)
-    })}{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('移入垃圾箱', async () => {
+    })}{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getManagedMarkdownDocumentFilePath(document.id)) })}{item('移入垃圾箱', async () => {
       if (!window.confirm(`将 ${document.title} 移入 BayTools 垃圾箱？`)) return
       await localBridge.trashManagedMarkdownDocument(document.id)
       await onChanged()
@@ -213,32 +214,11 @@ export function Sidebar() {
             const duplicate = await localBridge.duplicateJsonWorkspace(workspace.id)
             await refreshJson()
             navigate(`/json/${duplicate.id}`)
-          })}{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('移入垃圾箱', async () => {
+          })}{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getJsonWorkspaceFilePath(workspace.id)) })}{item('移入垃圾箱', async () => {
             if (!window.confirm(`将 ${workspace.title} 移入垃圾箱？`)) return
             await localBridge.trashJsonWorkspace(workspace.id)
             await refreshJson()
             navigate('/')
-          }, true)}</Menu>
-        </div>)}</div>}
-      </div>
-      <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
-      <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
-      <div className="nav-group">
-        <div className="nav-parent">
-          <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><Languages size={16} /><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
-          <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
-        </div>
-        {languageOpen && <div className="nav-children">{languageSources.map((source) => <div className="nav-child-wrap" key={source.id}>
-          <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><Languages size={13} /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
-          <Menu>{item('删除语种', async () => {
-            if (!window.confirm(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`)) return
-            await localBridge.deleteLanguageSource(source.id)
-            const remaining = languageSources.filter((item) => item.id !== source.id)
-            await refreshLanguages()
-            if (location.pathname === `/language/${source.id}`) {
-              if (remaining[0]) navigate(`/language/${remaining[0].id}`)
-              else navigate('/')
-            }
           }, true)}</Menu>
         </div>)}</div>}
       </div>
@@ -264,6 +244,28 @@ export function Sidebar() {
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : <MarkdownNodes sourceId={source.id} nodes={source.children} onChanged={refreshMarkdown} />)}
         </div>})}</div>}
       </div>
+      <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
+      <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
+      <div className="nav-group">
+        <div className="nav-parent">
+          <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><Languages size={16} /><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
+        </div>
+        {languageOpen && <div className="nav-children">{languageSources.map((source) => <div className="nav-child-wrap" key={source.id}>
+          <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><Languages size={13} /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
+          <Menu>{item('删除语种', async () => {
+            if (!window.confirm(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`)) return
+            await localBridge.deleteLanguageSource(source.id)
+            const remaining = languageSources.filter((item) => item.id !== source.id)
+            await refreshLanguages()
+            if (location.pathname === `/language/${source.id}`) {
+              if (remaining[0]) navigate(`/language/${remaining[0].id}`)
+              else navigate('/')
+            }
+          }, true)}</Menu>
+        </div>)}</div>}
+      </div>
+      <NavLink to="/server-status" className="nav-row"><Server size={16} /><span>服务器状态</span></NavLink>
     </nav>
     <div className="sidebar-bottom"><NavLink to="/settings" className="nav-row"><Settings size={16} /><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink></div>
   </aside>

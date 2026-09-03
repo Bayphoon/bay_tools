@@ -1,5 +1,5 @@
 import Editor from '@monaco-editor/react'
-import { Eye, FileCode2, FolderOpen, FolderPlus, Pencil, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
+import { Copy, Eye, FileCode2, FolderOpen, FolderPlus, Pencil, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -10,6 +10,7 @@ import type { Components } from 'react-markdown'
 import type { MarkdownDocument, MarkdownSourceTree, MarkdownUiState } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { ApiError, assetUrl, localBridge } from '../lib/api'
+import { copyFilePath } from '../lib/clipboard'
 import { useAppStore } from '../store/appStore'
 import { ManagedMarkdownPage } from './ManagedMarkdownPage'
 
@@ -151,7 +152,7 @@ function ExternalMarkdownPage() {
   </div>
   if (!document) return <div className="page"><PageHeader title={path.split('/').at(-1) ?? 'Markdown'} /><Spinner label={error || '正在读取文件'} /></div>
   return <div className="page full-height-page markdown-page">
-    <PageHeader title={path.split('/').at(-1) ?? 'Markdown'} description={path} actions={<><div className="save-status"><span className={`save-dot ${status}`} />{dirty ? '未保存' : status === 'saved' ? '已保存' : status === 'conflict' ? '文件冲突' : '磁盘文件'}</div><ToolButton onClick={() => localBridge.revealMarkdownDocument(document.sourceId, document.relativePath)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={renameDocument}>重命名</ToolButton><ToolButton className="danger" onClick={trashDocument}><Trash2 size={14} />删除</ToolButton><ToolButton className="primary" disabled={!dirty || status === 'saving'} onClick={save}><Save size={14} />保存</ToolButton></>} />
+    <PageHeader title={path.split('/').at(-1) ?? 'Markdown'} description={path} actions={<><div className="save-status"><span className={`save-dot ${status}`} />{dirty ? '未保存' : status === 'saved' ? '已保存' : status === 'conflict' ? '文件冲突' : '磁盘文件'}</div><ToolButton onClick={() => localBridge.revealMarkdownDocument(document.sourceId, document.relativePath)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={() => void copyFilePath(() => localBridge.getMarkdownDocumentFilePath(document.sourceId, document.relativePath))}><Copy size={14} />复制文件路径</ToolButton><ToolButton onClick={renameDocument}>重命名</ToolButton><ToolButton className="danger" onClick={trashDocument}><Trash2 size={14} />删除</ToolButton><ToolButton className="primary" disabled={!dirty || status === 'saving'} onClick={save}><Save size={14} />保存</ToolButton></>} />
     {status === 'conflict' && <div className="conflict-banner"><span>磁盘文件已经变化。重新加载会丢弃当前编辑内容。</span><ToolButton onClick={async () => { const value = await localBridge.getMarkdownDocument(document.sourceId, document.relativePath); setDocument(value); setContent(value.content); setDirty(false); setStatus('idle') }}>重新加载</ToolButton></div>}
     <div className="markdown-toolbar"><div className="segmented"><button className={mode === 'source' ? 'active' : ''} onClick={() => changeMode('source')}><FileCode2 size={14} />原文</button><button className={mode === 'preview' ? 'active' : ''} onClick={() => changeMode('preview')}><Eye size={14} />预览</button><button className={mode === 'split' ? 'active' : ''} onClick={() => changeMode('split')}><SplitSquareHorizontal size={14} />分屏</button></div><InlineError>{error}</InlineError></div>
     <div className={`markdown-workspace mode-${mode}`}>

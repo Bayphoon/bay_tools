@@ -1,7 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs'
-import { Moon, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
+import { LayoutGrid, Monitor, Moon, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { AppSettings, ThemeMode, TrashItem } from '../../shared/types'
+import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
 import { applyTheme } from '../hooks/useTheme'
@@ -19,6 +19,9 @@ export function SettingsPage() {
   const [trash, setTrash] = useState<TrashItem[]>([])
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [shortcutBusy, setShortcutBusy] = useState<ShortcutLocation>()
+  const [shortcutMessage, setShortcutMessage] = useState('')
+  const [shortcutError, setShortcutError] = useState('')
   const loadTrash = async () => setTrash(await localBridge.listTrash())
   useEffect(() => { void loadTrash().catch((value) => setError(value.message)) }, [])
   useEffect(() => setDraft(settings), [settings])
@@ -31,6 +34,19 @@ export function SettingsPage() {
   const save = async () => {
     try { await saveSettings(draft); setSaved(true); window.setTimeout(() => setSaved(false), 1500) }
     catch (value) { setError(value instanceof Error ? value.message : '设置保存失败') }
+  }
+  const createShortcut = async (location: ShortcutLocation) => {
+    setShortcutBusy(location)
+    setShortcutMessage('')
+    setShortcutError('')
+    try {
+      const result = await localBridge.createShortcut(location)
+      setShortcutMessage(`${result.replaced ? '已更新' : '已创建'}快捷方式：${result.path}`)
+    } catch (value) {
+      setShortcutError(value instanceof Error ? value.message : '快捷方式创建失败')
+    } finally {
+      setShortcutBusy(undefined)
+    }
   }
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
     try {
@@ -47,9 +63,9 @@ export function SettingsPage() {
     }
   }
   return <div className="page">
-    <PageHeader title="设置" description="调整 BayTools 外观并管理本地垃圾箱" />
+    <PageHeader title="设置" description="调整 BayTools 外观、启动方式并管理本地垃圾箱" />
     <Tabs.Root defaultValue="appearance" className="settings-tabs">
-      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
+      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
       <Tabs.Content value="appearance" className="settings-content">
         <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">THEME MODE</span><h2>外观模式</h2></div></div>
           <div className="theme-mode-grid">{([
@@ -62,6 +78,16 @@ export function SettingsPage() {
         </section>
         <section className="settings-section solar-info"><Sunrise size={22} /><div><strong>日出日落过渡</strong><p>06:00～06:30 从暗色过渡到亮色；19:00～19:30 从亮色过渡到暗色。其他时段保持对应主题。</p></div></section>
         <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存外观设置'}</ToolButton></div>
+      </Tabs.Content>
+      <Tabs.Content value="shortcut" className="settings-content">
+        <div className="section-heading"><div><span className="eyebrow">WINDOWS SHORTCUT</span><h2>启动快捷方式</h2><p>快捷方式使用 BayTools 图标，并通过无终端窗口的启动方式打开。</p></div></div>
+        <div className="shortcut-grid">
+          <section className="shortcut-card"><div className="shortcut-icon"><Monitor size={24} /></div><div><strong>桌面快捷方式</strong><span>从 Windows 桌面直接启动 BayTools。</span></div><ToolButton className="primary" disabled={Boolean(shortcutBusy)} onClick={() => void createShortcut('desktop')}>{shortcutBusy === 'desktop' ? '创建中' : '创建或更新'}</ToolButton></section>
+          <section className="shortcut-card"><div className="shortcut-icon"><LayoutGrid size={24} /></div><div><strong>开始菜单快捷方式</strong><span>可从开始菜单搜索 BayTools，也可以继续固定到任务栏。</span></div><ToolButton className="primary" disabled={Boolean(shortcutBusy)} onClick={() => void createShortcut('start-menu')}>{shortcutBusy === 'start-menu' ? '创建中' : '创建或更新'}</ToolButton></section>
+        </div>
+        {shortcutMessage && <div className="shortcut-result" role="status">{shortcutMessage}</div>}
+        <InlineError>{shortcutError}</InlineError>
+        <section className="settings-section shortcut-note"><strong>固定到任务栏</strong><p>先创建开始菜单快捷方式，再在开始菜单中右键 BayTools，选择“固定到任务栏”。Windows 11 不允许网页直接完成固定操作。</p></section>
       </Tabs.Content>
       <Tabs.Content value="trash" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>

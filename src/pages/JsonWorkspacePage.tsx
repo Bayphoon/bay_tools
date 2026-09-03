@@ -1,5 +1,5 @@
 import { DiffEditor } from '@monaco-editor/react'
-import { AlertTriangle, ChevronDown, ChevronUp, Eraser, FolderOpen, GitCompareArrows, ListTree, Pencil, Plus, Search, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Copy, Eraser, FolderOpen, GitCompareArrows, ListTree, Pencil, Plus, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES, type JsonPane, type JsonWorkspace } from '../../shared/types'
@@ -8,6 +8,7 @@ import { JsonTextEditor } from '../components/JsonTextEditor'
 import { CopyButton, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { useAutoFormatJson } from '../hooks/useAutoFormatJson'
 import { ApiError, localBridge } from '../lib/api'
+import { copyFilePath } from '../lib/clipboard'
 import type { JsonDifference } from '../lib/jsonDiff'
 import { useAppStore } from '../store/appStore'
 
@@ -216,7 +217,7 @@ export function JsonWorkspacePage() {
   const basePane = workspace.panes.find((pane) => pane.id === workspace.diffSelection.basePaneId) ?? workspace.panes[0]!
   const targetPane = workspace.panes.find((pane) => pane.id === workspace.diffSelection.targetPaneId) ?? workspace.panes[1]!
   return <div className="page full-height-page json-page">
-    <PageHeader title={<button className="page-title-button" disabled={saveState === 'saving'} onClick={renameWorkspace} title="点击重命名">{workspace.title}<Pencil size={13} /></button>} actions={<><div className="save-status"><span className={`save-dot ${saveState}`} />{saveState === 'saving' ? '保存中' : saveState === 'saved' ? '已保存' : saveState === 'conflict' ? '版本冲突' : saveState === 'error' ? '保存失败' : dirty ? '等待保存' : '未修改'}</div><ToolButton onClick={() => localBridge.revealJsonWorkspace(workspace.id)}><FolderOpen size={14} />打开文件位置</ToolButton></>} />
+    <PageHeader title={<button className="page-title-button" disabled={saveState === 'saving'} onClick={renameWorkspace} title="点击重命名">{workspace.title}<Pencil size={13} /></button>} actions={<><div className="save-status"><span className={`save-dot ${saveState}`} />{saveState === 'saving' ? '保存中' : saveState === 'saved' ? '已保存' : saveState === 'conflict' ? '版本冲突' : saveState === 'error' ? '保存失败' : dirty ? '等待保存' : '未修改'}</div><ToolButton onClick={() => localBridge.revealJsonWorkspace(workspace.id)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={() => void copyFilePath(() => localBridge.getJsonWorkspaceFilePath(workspace.id))}><Copy size={14} />复制文件路径</ToolButton></>} />
     {saveState === 'conflict' && <div className="conflict-banner"><AlertTriangle size={16} /><span>磁盘版本已变化，没有覆盖你的内容。</span><ToolButton onClick={reload}>加载磁盘版本</ToolButton><ToolButton className="primary" onClick={saveAsCopy}>另存为副本</ToolButton></div>}
     <div className="compare-toolbar">
       <div className="segmented"><button className={mode === 'split' ? 'active' : ''} onClick={() => setMode('split')}>多栏编辑</button><button className={mode === 'structure' ? 'active' : ''} onClick={compare}><GitCompareArrows size={13} />结构 Diff</button><button className={mode === 'text' ? 'active' : ''} onClick={() => setMode('text')}>文本 Diff</button></div>

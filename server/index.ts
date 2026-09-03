@@ -4,16 +4,19 @@ import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import openBrowser from 'open'
-import type { AppSettings, ColorState, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState } from '../shared/types.js'
+import type { AppSettings, ColorState, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
+import { ServerStatusStore } from './serverStatusStore.js'
 import { BayToolsStore } from './store.js'
 import { selectWindowsFolder } from './folderDialog.js'
+import { createWindowsShortcut } from './shortcut.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
-const apiVersion = 5
+const serverStatusStore = new ServerStatusStore(projectRoot)
+const apiVersion = 8
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -73,6 +76,7 @@ app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/reveal', async (r
   await revealInExplorer(await store.getJsonWorkspaceLocation(request.params.id), true)
   return reply.status(204).send()
 })
+app.get<{ Params: { id: string } }>('/api/json-workspaces/:id/location', async (request) => ({ path: await store.getJsonWorkspaceLocation(request.params.id) }))
 
 app.get('/api/colors', async () => store.getColors())
 app.put<{ Body: ColorState }>('/api/colors', async (request) => store.updateColors(request.body))
@@ -96,10 +100,18 @@ app.put<{ Params: { id: string }; Body: { key: string; favorite: boolean; revisi
   return languageStore.setFavorite(request.params.id, key, favorite, revision)
 })
 
+app.get('/api/server-status', async () => serverStatusStore.getState())
+app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) => serverStatusStore.sync(request.body?.url ?? ''))
+
 app.post('/api/system/select-directory', async () => {
   if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '目录选择器当前仅支持 Windows')
   const script = join(projectRoot, 'server', 'select-folder.ps1')
   return { path: await selectWindowsFolder(script) }
+})
+app.post<{ Body: { location?: ShortcutLocation } }>('/api/system/shortcut', async (request) => {
+  const location = request.body?.location
+  if (location !== 'desktop' && location !== 'start-menu') throw new AppError(400, 'INVALID_SHORTCUT_LOCATION', '快捷方式位置无效')
+  return createWindowsShortcut(projectRoot, location)
 })
 
 app.get('/api/markdown/sources', async () => store.listMarkdownSources())
@@ -130,6 +142,7 @@ app.post<{ Body: { sourceId: string; path: string } }>('/api/markdown/document/r
   await revealInExplorer(await store.getMarkdownDocumentLocation(request.body.sourceId, request.body.path), true)
   return reply.status(204).send()
 })
+app.get<{ Querystring: { sourceId: string; path: string } }>('/api/markdown/document/location', async (request) => ({ path: await store.getMarkdownDocumentLocation(request.query.sourceId, request.query.path) }))
 
 app.get('/api/markdown/managed', async () => store.getManagedMarkdownLibrary())
 app.post<{ Body: { title?: string; folderId?: string } }>('/api/markdown/managed/documents', async (request) => store.createManagedMarkdownDocument(request.body?.title, request.body?.folderId))
@@ -147,6 +160,7 @@ app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/reveal
   await revealInExplorer(await store.getManagedMarkdownDocumentLocation(request.params.id), true)
   return reply.status(204).send()
 })
+app.get<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/location', async (request) => ({ path: await store.getManagedMarkdownDocumentLocation(request.params.id) }))
 app.post<{ Body: { name?: string } }>('/api/markdown/managed/folders', async (request) => store.createManagedMarkdownFolder(request.body?.name))
 app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/markdown/managed/folders/:id', async (request) => store.renameManagedMarkdownFolder(request.params.id, request.body.name))
 app.delete<{ Params: { id: string } }>('/api/markdown/managed/folders/:id', async (request, reply) => {
@@ -187,7 +201,9 @@ async function registerFrontend(): Promise<void> {
 }
 
 export async function buildApp(options?: { serveFrontend?: boolean }) {
-  await Promise.all([store.init(), languageStore.init()])
+  // 主存储初始化会清理整个 Doc 下遗留的原子写入临时文件，必须先于其他存储执行。
+  await store.init()
+  await Promise.all([languageStore.init(), serverStatusStore.init()])
   if (options?.serveFrontend) await registerFrontend()
   return app
 }
