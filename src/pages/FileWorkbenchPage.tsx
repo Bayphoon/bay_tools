@@ -1,0 +1,226 @@
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import Editor from '@monaco-editor/react'
+import { ChevronDown, ChevronRight, Copy, Download, File, FileCode2, FileImage, FileText, FolderOpen, MoreHorizontal, Pencil, Plus, Save, Search, Star, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
+import remarkGfm from 'remark-gfm'
+import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, type FileWorkbenchItem, type FileWorkbenchLibrary, type FileWorkbenchTextDocument } from '../../shared/types'
+import { ToolButton } from '../components/ui'
+import { ApiError, fileWorkbenchContentUrl, localBridge } from '../lib/api'
+import { copyFilePath, showAppNotice } from '../lib/clipboard'
+import { useAppStore } from '../store/appStore'
+
+type MarkdownMode = 'source' | 'preview' | 'split'
+
+const formatSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+}
+
+const editorLanguage = (extension: string) => ({
+  '.json': 'json', '.js': 'javascript', '.jsx': 'javascript', '.ts': 'typescript', '.tsx': 'typescript', '.lua': 'lua', '.xml': 'xml', '.html': 'html', '.htm': 'html', '.css': 'css', '.scss': 'scss', '.sql': 'sql', '.py': 'python', '.java': 'java', '.cs': 'csharp', '.cpp': 'cpp', '.c': 'c', '.h': 'cpp', '.md': 'markdown', '.yaml': 'yaml', '.yml': 'yaml', '.sh': 'shell', '.ps1': 'powershell',
+}[extension] ?? 'plaintext')
+
+function FileTypeIcon({ item, size = 17 }: { item: FileWorkbenchItem; size?: number }) {
+  if (item.previewKind === 'image') return <FileImage size={size} />
+  if (item.previewKind === 'text' || item.previewKind === 'markdown') return <FileCode2 size={size} />
+  if (item.previewKind === 'pdf') return <FileText size={size} />
+  return <File size={size} />
+}
+
+function FileMenu({ item, onRename, onFavorite, onTrash }: { item: FileWorkbenchItem; onRename: () => void; onFavorite: () => void; onTrash: () => void }) {
+  const download = () => {
+    const link = document.createElement('a')
+    link.href = fileWorkbenchContentUrl(item.id, true)
+    link.download = item.name
+    link.click()
+  }
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild><button className="icon-button" aria-label="更多文件操作"><MoreHorizontal size={16} /></button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content className="dropdown-content" sideOffset={4}>
+      <DropdownMenu.Item className="dropdown-item" onSelect={onRename}>重命名</DropdownMenu.Item>
+      <DropdownMenu.Item className="dropdown-item" onSelect={onFavorite}>{item.favorite ? '取消收藏' : '收藏'}</DropdownMenu.Item>
+      <DropdownMenu.Item className="dropdown-item" onSelect={() => void copyFilePath(() => localBridge.getFileWorkbenchItemPath(item.id))}>复制文件路径</DropdownMenu.Item>
+      <DropdownMenu.Item className="dropdown-item" onSelect={() => void localBridge.revealFileWorkbenchItem(item.id)}>打开副本所在位置</DropdownMenu.Item>
+      <DropdownMenu.Item className="dropdown-item" onSelect={download}>导出副本</DropdownMenu.Item>
+      <DropdownMenu.Separator className="dropdown-separator" />
+      <DropdownMenu.Item className="dropdown-item danger" onSelect={onTrash}>移入垃圾箱</DropdownMenu.Item>
+    </DropdownMenu.Content></DropdownMenu.Portal>
+  </DropdownMenu.Root>
+}
+
+function FileRow({ item, active, onOpen, onRename, onFavorite, onTrash }: { item: FileWorkbenchItem; active: boolean; onOpen: () => void; onRename: () => void; onFavorite: () => void; onTrash: () => void }) {
+  return <div className={`file-library-row ${active ? 'active' : ''}`} onClick={onOpen}>
+    <span className="file-library-icon"><FileTypeIcon item={item} /></span>
+    <div className="file-library-copy"><strong title={item.name}>{item.name}</strong><span>{item.extension.slice(1).toUpperCase() || 'FILE'} · {formatSize(item.size)}</span>{item.description && <small title={item.description}>{item.description}</small>}</div>
+    <button className={`file-favorite ${item.favorite ? 'active' : ''}`} aria-label={item.favorite ? '取消收藏' : '收藏'} onClick={(event) => { event.stopPropagation(); onFavorite() }}><Star size={15} fill={item.favorite ? 'currentColor' : 'none'} /></button>
+    <span onClick={(event) => event.stopPropagation()}><FileMenu item={item} onRename={onRename} onFavorite={onFavorite} onTrash={onTrash} /></span>
+  </div>
+}
+
+function DescriptionEditor({ item, onSaved, onEditingChange }: { item: FileWorkbenchItem; onSaved: (item: FileWorkbenchItem) => void; onEditingChange: (editing: boolean) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(item.description)
+  useEffect(() => { setValue(item.description); setEditing(false) }, [item.id, item.description])
+  const save = async () => {
+    try {
+      const saved = await localBridge.updateFileWorkbenchMetadata(item.id, { description: value, metadataRevision: item.metadataRevision })
+      onSaved(saved); setEditing(false); onEditingChange(false); showAppNotice({ kind: 'success', message: '文件描述已保存' })
+    } catch (error) { showAppNotice({ kind: 'error', message: error instanceof Error ? error.message : '描述保存失败' }) }
+  }
+  if (editing) return <section className="file-description editing"><div className="file-description-label">描述 <span>{value.length}/1000</span></div><textarea autoFocus maxLength={1000} value={value} onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setValue(item.description); setEditing(false); onEditingChange(false) } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void save() } }} /><div className="file-description-actions"><ToolButton onClick={() => { setValue(item.description); setEditing(false); onEditingChange(false) }}>取消</ToolButton><ToolButton className="primary" onClick={() => void save()}>保存</ToolButton></div></section>
+  return <button className={`file-description ${item.description ? '' : 'empty'}`} onClick={() => { setEditing(true); onEditingChange(true) }}><span className="file-description-label">描述</span><span className="file-description-value">{item.description || '添加这个文件的用途、来源或注意事项……'}</span><Pencil size={14} /></button>
+}
+
+function MarkdownPreview({ content }: { content: string }) {
+  return <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>{content}</ReactMarkdown></article>
+}
+
+function FileContent({ item, document, draft, dirty, loading, error, markdownMode, zoom, onDraft, onSave, onMarkdownMode, onZoom }: {
+  item: FileWorkbenchItem; document?: FileWorkbenchTextDocument; draft: string; dirty: boolean; loading: boolean; error: string; markdownMode: MarkdownMode; zoom: number
+  onDraft: (value: string) => void; onSave: () => void; onMarkdownMode: (mode: MarkdownMode) => void; onZoom: (zoom: number) => void
+}) {
+  if (item.previewKind === 'text' || item.previewKind === 'markdown') {
+    if (item.size > FILE_WORKBENCH_TEXT_EDIT_LIMIT) return <div className="file-preview-message"><FileCode2 size={36} /><h3>文件过大，未载入编辑器</h3><p>{formatSize(item.size)} 的文本可能导致浏览器卡顿，请导出后使用本地编辑器打开。</p></div>
+    if (loading) return <div className="file-preview-message">正在读取文件……</div>
+    if (error || !document) return <div className="file-preview-message error">{error || '无法读取文件'}</div>
+    const editor = <div className="file-text-editor"><Editor height="100%" language={editorLanguage(item.extension)} value={draft} onChange={(value) => onDraft(value ?? '')} theme="vs-dark" options={{ automaticLayout: true, minimap: { enabled: false }, fontSize: 14, fontFamily: 'Cascadia Code, Consolas, monospace', wordWrap: item.previewKind === 'markdown' ? 'on' : 'off', scrollBeyondLastLine: false }} /></div>
+    return <><div className="file-view-toolbar">{item.previewKind === 'markdown' && <div className="segmented"><button className={markdownMode === 'source' ? 'active' : ''} onClick={() => onMarkdownMode('source')}>原文</button><button className={markdownMode === 'preview' ? 'active' : ''} onClick={() => onMarkdownMode('preview')}>预览</button><button className={markdownMode === 'split' ? 'active' : ''} onClick={() => onMarkdownMode('split')}>分屏</button></div>}<span className={`file-save-state ${dirty ? 'dirty' : ''}`}>{dirty ? '未保存' : '已保存'}</span><ToolButton className="primary" disabled={!dirty} onClick={onSave}><Save size={14} />保存</ToolButton></div><div className={`file-text-workspace ${item.previewKind === 'markdown' ? `markdown-${markdownMode}` : ''}`}>{item.previewKind !== 'markdown' || markdownMode !== 'preview' ? editor : null}{item.previewKind === 'markdown' && markdownMode !== 'source' && <MarkdownPreview content={draft} />}</div></>
+  }
+  if (item.previewKind === 'image') return <><div className="file-view-toolbar"><ToolButton onClick={() => onZoom(Math.max(.25, zoom - .25))}><ZoomOut size={14} /></ToolButton><span>{Math.round(zoom * 100)}%</span><ToolButton onClick={() => onZoom(Math.min(4, zoom + .25))}><ZoomIn size={14} /></ToolButton><ToolButton onClick={() => onZoom(1)}>原始大小</ToolButton><ToolButton onClick={() => onZoom(0)}>适应窗口</ToolButton></div><div className="file-image-preview"><img src={fileWorkbenchContentUrl(item.id)} alt={item.name} style={zoom === 0 ? { maxWidth: '100%', maxHeight: '100%' } : { width: `${zoom * 100}%`, maxWidth: 'none' }} /></div></>
+  if (item.previewKind === 'pdf') return <div className="file-pdf-preview"><iframe src={fileWorkbenchContentUrl(item.id)} title={item.name} /></div>
+  return <div className="file-preview-message"><File size={40} /><h3>暂不支持预览此文件</h3><p>{item.name} · {formatSize(item.size)}</p><a className="tool-button primary" href={fileWorkbenchContentUrl(item.id, true)} download={item.name}><Download size={14} />导出副本</a></div>
+}
+
+export function FileWorkbenchPage() {
+  const setFileWorkbenchDirty = useAppStore((state) => state.setFileWorkbenchDirty)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [library, setLibrary] = useState<FileWorkbenchLibrary>()
+  const [openIds, setOpenIds] = useState<string[]>([])
+  const [activeId, setActiveId] = useState<string>()
+  const [documents, setDocuments] = useState<Record<string, FileWorkbenchTextDocument>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
+  const [loadingId, setLoadingId] = useState<string>()
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [favoritesOpen, setFavoritesOpen] = useState(true)
+  const [allOpen, setAllOpen] = useState(true)
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>('split')
+  const [zoom, setZoom] = useState(0)
+  const [descriptionEditingId, setDescriptionEditingId] = useState<string>()
+
+  const refresh = async () => setLibrary(await localBridge.listFileWorkbenchItems())
+  useEffect(() => { void refresh().catch((value) => setError(value instanceof Error ? value.message : '文件库加载失败')) }, [])
+  useEffect(() => {
+    const handler = (event: BeforeUnloadEvent) => { if (dirtyIds.size || descriptionEditingId) event.preventDefault() }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirtyIds, descriptionEditingId])
+  useEffect(() => {
+    setFileWorkbenchDirty(dirtyIds.size > 0 || Boolean(descriptionEditingId))
+    return () => setFileWorkbenchDirty(false)
+  }, [dirtyIds, descriptionEditingId, setFileWorkbenchDirty])
+
+  const activeItem = library?.items.find((item) => item.id === activeId)
+  useEffect(() => {
+    if (!activeItem || (activeItem.previewKind !== 'text' && activeItem.previewKind !== 'markdown') || activeItem.size > FILE_WORKBENCH_TEXT_EDIT_LIMIT || documents[activeItem.id]) return
+    setLoadingId(activeItem.id); setError('')
+    void localBridge.getFileWorkbenchText(activeItem.id).then((value) => { setDocuments((items) => ({ ...items, [value.id]: value })); setDrafts((items) => ({ ...items, [value.id]: value.content })) }).catch((value) => setError(value instanceof Error ? value.message : '文件读取失败')).finally(() => setLoadingId(undefined))
+  }, [activeItem, documents])
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase()
+    return (library?.items ?? []).filter((item) => !query || item.name.toLocaleLowerCase().includes(query) || item.description.toLocaleLowerCase().includes(query))
+  }, [library, search])
+  const favorites = filtered.filter((item) => item.favorite).sort((a, b) => (b.favoritedAt ?? '').localeCompare(a.favoritedAt ?? ''))
+  const totalSize = (library?.items ?? []).reduce((sum, item) => sum + item.size, 0)
+
+  const replaceItem = (next: FileWorkbenchItem) => setLibrary((current) => current ? { ...current, items: current.items.map((item) => item.id === next.id ? next : item) } : current)
+  const openFile = (item: FileWorkbenchItem) => {
+    if (descriptionEditingId && descriptionEditingId !== item.id && !window.confirm('文件描述尚未保存，切换文件将丢弃描述草稿，是否继续？')) return
+    setDescriptionEditingId(undefined); setOpenIds((ids) => ids.includes(item.id) ? ids : [...ids, item.id]); setActiveId(item.id); setZoom(0); setError('')
+  }
+  const closeTab = (id: string, force = false) => {
+    if (!force && (dirtyIds.has(id) || descriptionEditingId === id) && !window.confirm('该文件有未保存的修改，确定关闭吗？')) return
+    const position = openIds.indexOf(id)
+    const next = openIds.filter((value) => value !== id)
+    setOpenIds(next); if (descriptionEditingId === id) setDescriptionEditingId(undefined); setDirtyIds((values) => { const copy = new Set(values); copy.delete(id); return copy })
+    if (activeId === id) setActiveId(next[Math.min(position, next.length - 1)])
+  }
+  const updateMetadata = async (item: FileWorkbenchItem, patch: { name?: string; favorite?: boolean; description?: string }) => {
+    try { replaceItem(await localBridge.updateFileWorkbenchMetadata(item.id, { ...patch, metadataRevision: item.metadataRevision })) }
+    catch (value) { setError(value instanceof Error ? value.message : '文件信息修改失败'); await refresh() }
+  }
+  const renameItem = async (item: FileWorkbenchItem) => {
+    const name = window.prompt('新的文件名', item.name)?.trim()
+    if (!name || name === item.name) return
+    const oldExtension = item.extension.toLowerCase()
+    const newExtension = name.includes('.') ? `.${name.split('.').at(-1)!.toLowerCase()}` : ''
+    if (oldExtension !== newExtension && !window.confirm('修改扩展名可能改变文件的预览方式，是否继续？')) return
+    await updateMetadata(item, { name })
+  }
+  const trashItem = async (item: FileWorkbenchItem) => {
+    const warning = dirtyIds.has(item.id) ? `将 ${item.name} 移入垃圾箱？未保存的编辑会被丢弃。` : `将 ${item.name} 移入 BayTools 垃圾箱？`
+    if (!window.confirm(warning)) return
+    try { await localBridge.trashFileWorkbenchItem(item.id); closeTab(item.id, true); await refresh(); showAppNotice({ kind: 'success', message: '文件已移入垃圾箱' }) }
+    catch (value) { setError(value instanceof Error ? value.message : '删除失败') }
+  }
+  const upload = async (files: File[]) => {
+    if (!files.length || uploading) return
+    setUploading(true); setError('')
+    let last: FileWorkbenchItem | undefined
+    let completed = 0
+    try {
+      for (const file of files) {
+        if (file.size > FILE_WORKBENCH_MAX_UPLOAD_SIZE) throw new Error(`${file.name} 超过 512 MiB 的单文件限制`)
+        last = await localBridge.uploadFileWorkbenchFile(file)
+        completed += 1
+      }
+      showAppNotice({ kind: 'success', message: `已添加 ${completed} 个文件` })
+    } catch (value) { setError(value instanceof Error ? value.message : '文件添加失败') }
+    finally { await refresh(); if (last) openFile(last); setUploading(false); if (inputRef.current) inputRef.current.value = '' }
+  }
+  const saveActive = async () => {
+    if (!activeItem) return
+    const document = documents[activeItem.id]
+    if (!document) return
+    try {
+      const saved = await localBridge.saveFileWorkbenchText({ ...document, content: drafts[activeItem.id] ?? '' })
+      setDocuments((items) => ({ ...items, [saved.id]: saved })); setDirtyIds((values) => { const copy = new Set(values); copy.delete(saved.id); return copy }); await refresh(); showAppNotice({ kind: 'success', message: '文件已保存' })
+    } catch (value) { setError(value instanceof ApiError && value.status === 409 ? '保存冲突：文件已在其他窗口中改变，请关闭页签后重新打开。' : value instanceof Error ? value.message : '保存失败') }
+  }
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && activeItem) { event.preventDefault(); void saveActive() } }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
+  const onDrop = (event: DragEvent) => { event.preventDefault(); setDragging(false); void upload(Array.from(event.dataTransfer.files)) }
+
+  return <div className="file-workbench-page" onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={onDrop}>
+    <header className="file-workbench-header"><div><h1>文件工作台</h1><span>{library?.items.length ?? 0} 个文件 · {formatSize(totalSize)}</span></div><ToolButton className="primary" disabled={uploading} onClick={() => inputRef.current?.click()}><Plus size={15} />{uploading ? '正在添加…' : '添加文件'}</ToolButton><input ref={inputRef} hidden type="file" multiple onChange={(event) => void upload(Array.from(event.target.files ?? []))} /></header>
+    {error && <div className="file-workbench-error">{error}<button onClick={() => setError('')}><X size={14} /></button></div>}
+    <div className="file-workbench-shell">
+      <aside className="file-library"><label className="file-library-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名或描述" /></label>
+        <section><button className="file-library-group" onClick={() => setFavoritesOpen((value) => !value)}>{favoritesOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Star size={15} /><strong>收藏文件</strong><span>{favorites.length}</span></button>{favoritesOpen && <div>{favorites.length ? favorites.map((item) => <FileRow key={`favorite-${item.id}`} item={item} active={activeId === item.id} onOpen={() => openFile(item)} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />) : <p className="file-library-empty">收藏的文件会固定显示在这里</p>}</div>}</section>
+        <section><button className="file-library-group" onClick={() => setAllOpen((value) => !value)}>{allOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<FolderOpen size={15} /><strong>全部文件</strong><span>{filtered.length}</span></button>{allOpen && <div>{filtered.map((item) => <FileRow key={item.id} item={item} active={activeId === item.id} onOpen={() => openFile(item)} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />)}</div>}</section>
+        <button className="file-library-drop" onClick={() => inputRef.current?.click()}><Plus size={14} />拖入或选择文件添加</button>
+      </aside>
+      <main className="file-workspace-panel">
+        <div className="file-tabs">{openIds.map((id) => { const item = library?.items.find((value) => value.id === id); if (!item) return null; return <button key={id} className={`file-tab ${id === activeId ? 'active' : ''}`} onClick={() => openFile(item)}><FileTypeIcon item={item} size={14} /><span>{item.name}</span>{dirtyIds.has(id) && <i />}<X size={13} onClick={(event) => { event.stopPropagation(); closeTab(id) }} /></button> })}</div>
+        {!activeItem ? <div className="file-workbench-empty"><File size={42} /><h2>{library?.items.length ? '选择文件进行预览' : '将文件拖到这里'}</h2><p>文件会复制到 BayTools 工作台，不会修改或移动源文件。</p><ToolButton className="primary" onClick={() => inputRef.current?.click()}>选择文件</ToolButton></div> : <div className="file-active-workspace">
+          <div className="file-active-header"><div><h2>{activeItem.name}</h2><span>{activeItem.extension.slice(1).toUpperCase() || 'FILE'} · {formatSize(activeItem.size)} · 更新于 {new Date(activeItem.updatedAt).toLocaleString()}</span></div><div><ToolButton onClick={() => void updateMetadata(activeItem, { favorite: !activeItem.favorite })}><Star size={14} fill={activeItem.favorite ? 'currentColor' : 'none'} />{activeItem.favorite ? '已收藏' : '收藏'}</ToolButton><ToolButton onClick={() => void renameItem(activeItem)}>重命名</ToolButton><ToolButton onClick={() => void copyFilePath(() => localBridge.getFileWorkbenchItemPath(activeItem.id))}><Copy size={14} />复制路径</ToolButton><ToolButton onClick={() => void localBridge.revealFileWorkbenchItem(activeItem.id)}><FolderOpen size={14} />打开位置</ToolButton><FileMenu item={activeItem} onRename={() => void renameItem(activeItem)} onFavorite={() => void updateMetadata(activeItem, { favorite: !activeItem.favorite })} onTrash={() => void trashItem(activeItem)} /></div></div>
+          <DescriptionEditor item={activeItem} onSaved={replaceItem} onEditingChange={(editing) => setDescriptionEditingId(editing ? activeItem.id : undefined)} />
+          <div className="file-active-content"><FileContent item={activeItem} document={documents[activeItem.id]} draft={drafts[activeItem.id] ?? ''} dirty={dirtyIds.has(activeItem.id)} loading={loadingId === activeItem.id} error={error} markdownMode={markdownMode} zoom={zoom} onDraft={(value) => { setDrafts((items) => ({ ...items, [activeItem.id]: value })); setDirtyIds((values) => { const copy = new Set(values); if (value === documents[activeItem.id]?.content) copy.delete(activeItem.id); else copy.add(activeItem.id); return copy }) }} onSave={() => void saveActive()} onMarkdownMode={setMarkdownMode} onZoom={setZoom} /></div>
+        </div>}
+      </main>
+    </div>
+    {dragging && <div className="file-drop-overlay"><File size={50} /><strong>松开鼠标，添加到工作台</strong><span>文件将复制，源文件不会改变</span></div>}
+  </div>
+}

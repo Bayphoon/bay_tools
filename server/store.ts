@@ -9,12 +9,20 @@ import {
   rm,
   stat,
 } from 'node:fs/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
 import { createHash, randomUUID } from 'node:crypto'
 import { basename, dirname, extname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path'
+import { Transform, type Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import type {
   AppSettings,
   ColorState,
+  FileWorkbenchItem,
+  FileWorkbenchLibrary,
+  FileWorkbenchMetadataPatch,
+  FileWorkbenchPreviewKind,
+  FileWorkbenchTextDocument,
   JsonPane,
   JsonScratchpad,
   JsonViewMode,
@@ -32,7 +40,7 @@ import type {
   RestoreResult,
   TrashItem,
 } from '../shared/types.js'
-import { JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES } from '../shared/types.js'
+import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES } from '../shared/types.js'
 import { AppError, ConflictError } from './errors.js'
 import { atomicWrite, exists, readJson, recoverAtomicArtifacts, writeJson } from './filesystem.js'
 
@@ -66,8 +74,41 @@ interface TrashIndex {
   items: TrashItem[]
 }
 
+interface FileWorkbenchUploadMetadata {
+  name: string
+  mimeType?: string
+  size: number
+  sourceLastModified?: string
+}
+
 const now = () => new Date().toISOString()
 const hashBuffer = (value: Buffer | string) => createHash('sha256').update(value).digest('hex')
+
+const textExtensions = new Set(['.txt', '.log', '.lua', '.js', '.jsx', '.ts', '.tsx', '.css', '.scss', '.html', '.htm', '.xml', '.csv', '.ini', '.cfg', '.conf', '.yaml', '.yml', '.toml', '.sql', '.sh', '.ps1', '.bat', '.cmd', '.py', '.java', '.cs', '.cpp', '.c', '.h', '.go', '.rs'])
+const imageExtensions = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'])
+
+export function validateFileWorkbenchName(value: string): string {
+  const name = value.trim()
+  if (!name || name === '.' || name === '..' || basename(name) !== name || /[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) || name.length > 200) {
+    throw new AppError(400, 'INVALID_NAME', '文件名为空、过长或包含 Windows 不允许的字符')
+  }
+  return name
+}
+
+export function getFileWorkbenchPreviewKind(name: string, mimeType = ''): FileWorkbenchPreviewKind {
+  const extension = extname(name).toLowerCase()
+  if (extension === '.md' || extension === '.markdown') return 'markdown'
+  if (extension === '.pdf' || mimeType === 'application/pdf') return 'pdf'
+  if (imageExtensions.has(extension)) return 'image'
+  if (extension === '.json' || textExtensions.has(extension) || mimeType.startsWith('text/')) return 'text'
+  return 'binary'
+}
+
+async function hashFile(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer)
+  return hash.digest('hex')
+}
 
 function createJsonPane(title: string, text = '{\n  \n}', view: JsonViewMode = 'text'): JsonPane {
   return { id: randomUUID(), title, text, view }
@@ -198,6 +239,8 @@ export class BayToolsStore {
   private readonly markdownUiPath: string
   private readonly managedMarkdownIndexPath: string
   private readonly managedMarkdownFilesRoot: string
+  private readonly fileWorkbenchIndexPath: string
+  private readonly fileWorkbenchItemsRoot: string
   private readonly trashIndexPath: string
   private readonly trashItemsRoot: string
 
@@ -214,6 +257,8 @@ export class BayToolsStore {
     this.markdownUiPath = join(this.docRoot, 'markdown', 'ui-state.json')
     this.managedMarkdownIndexPath = join(this.docRoot, 'markdown', 'documents', 'index.json')
     this.managedMarkdownFilesRoot = join(this.docRoot, 'markdown', 'documents', 'files')
+    this.fileWorkbenchIndexPath = join(this.docRoot, 'file-workbench', 'index.json')
+    this.fileWorkbenchItemsRoot = join(this.docRoot, 'file-workbench', 'items')
     this.trashIndexPath = join(this.docRoot, 'trash', 'index.json')
     this.trashItemsRoot = join(this.docRoot, 'trash', 'items')
   }
@@ -225,6 +270,7 @@ export class BayToolsStore {
       mkdir(dirname(this.recentColorsPath), { recursive: true }),
       mkdir(dirname(this.markdownSourcesPath), { recursive: true }),
       mkdir(this.managedMarkdownFilesRoot, { recursive: true }),
+      mkdir(this.fileWorkbenchItemsRoot, { recursive: true }),
     ])
     await recoverAtomicArtifacts(this.docRoot)
     await this.ensureJson(this.settingsPath, defaultSettings())
@@ -235,6 +281,7 @@ export class BayToolsStore {
     await this.ensureJson(this.markdownSourcesPath, { schemaVersion: 1, updatedAt: now(), revision: 1, sources: [] } satisfies MarkdownSourceFile)
     await this.ensureJson(this.markdownUiPath, { schemaVersion: 1, updatedAt: now(), revision: 1, mode: 'split' } satisfies MarkdownUiState)
     await this.ensureJson(this.managedMarkdownIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, folders: [], documents: [] } satisfies ManagedMarkdownLibrary)
+    await this.ensureJson(this.fileWorkbenchIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies FileWorkbenchLibrary)
     await this.ensureJson(this.trashIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies TrashIndex)
   }
 
@@ -719,6 +766,184 @@ export class BayToolsStore {
     return { buffer: await readFile(fullPath), extension }
   }
 
+  private fileWorkbenchItemRoot(id: string): string {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError(400, 'INVALID_ID', '文件工作台 ID 无效')
+    return join(this.fileWorkbenchItemsRoot, id)
+  }
+
+  private fileWorkbenchContentPath(item: FileWorkbenchItem): string {
+    return join(this.fileWorkbenchItemRoot(item.id), 'content', validateFileWorkbenchName(item.name))
+  }
+
+  async listFileWorkbenchItems(): Promise<FileWorkbenchLibrary> {
+    return readJson<FileWorkbenchLibrary>(this.fileWorkbenchIndexPath)
+  }
+
+  async getFileWorkbenchItem(id: string): Promise<FileWorkbenchItem> {
+    const item = (await this.listFileWorkbenchItems()).items.find((value) => value.id === id)
+    if (!item) throw new AppError(404, 'NOT_FOUND', '工作台文件不存在')
+    if (!(await exists(this.fileWorkbenchContentPath(item)))) throw new AppError(404, 'FILE_MISSING', '工作台文件内容不存在')
+    return item
+  }
+
+  async importFileWorkbenchFile(stream: Readable, metadata: FileWorkbenchUploadMetadata): Promise<FileWorkbenchItem> {
+    const name = validateFileWorkbenchName(metadata.name)
+    if (!Number.isSafeInteger(metadata.size) || metadata.size < 0 || metadata.size > FILE_WORKBENCH_MAX_UPLOAD_SIZE) {
+      throw new AppError(413, 'FILE_TOO_LARGE', `单个文件不能超过 ${FILE_WORKBENCH_MAX_UPLOAD_SIZE / 1024 / 1024} MiB`)
+    }
+    const id = randomUUID()
+    const itemRoot = this.fileWorkbenchItemRoot(id)
+    const temporary = join(itemRoot, `upload.tmp-${randomUUID()}`)
+    const target = join(itemRoot, 'content', name)
+    const hash = createHash('sha256')
+    let received = 0
+    await mkdir(itemRoot, { recursive: true })
+    try {
+      const counter = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          received += chunk.byteLength
+          if (received > FILE_WORKBENCH_MAX_UPLOAD_SIZE || received > metadata.size) {
+            callback(new AppError(413, 'FILE_TOO_LARGE', '接收的文件大小超过声明值或限制'))
+            return
+          }
+          hash.update(chunk)
+          callback(null, chunk)
+        },
+      })
+      await pipeline(stream, counter, createWriteStream(temporary, { flags: 'wx' }))
+      if (received !== metadata.size) throw new AppError(400, 'SIZE_MISMATCH', '文件上传不完整，大小校验失败')
+      await mkdir(dirname(target), { recursive: true })
+      await rename(temporary, target)
+      const createdAt = now()
+      const mimeType = (metadata.mimeType ?? '').slice(0, 160)
+      const item: FileWorkbenchItem = {
+        schemaVersion: 1,
+        id,
+        importedName: name,
+        name,
+        description: '',
+        favorite: false,
+        mimeType,
+        extension: extname(name).toLowerCase(),
+        previewKind: getFileWorkbenchPreviewKind(name, mimeType),
+        size: received,
+        sha256: hash.digest('hex'),
+        createdAt,
+        updatedAt: createdAt,
+        ...(metadata.sourceLastModified ? { sourceLastModified: metadata.sourceLastModified } : {}),
+        contentRevision: 1,
+        metadataRevision: 1,
+      }
+      await writeJson(join(itemRoot, 'metadata.json'), item)
+      const library = await this.listFileWorkbenchItems()
+      library.items.push(item)
+      library.revision += 1
+      library.updatedAt = now()
+      await writeJson(this.fileWorkbenchIndexPath, library)
+      return item
+    } catch (error) {
+      await rm(itemRoot, { recursive: true, force: true })
+      throw error
+    }
+  }
+
+  async updateFileWorkbenchMetadata(id: string, patch: FileWorkbenchMetadataPatch): Promise<FileWorkbenchItem> {
+    const library = await this.listFileWorkbenchItems()
+    const position = library.items.findIndex((value) => value.id === id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', '工作台文件不存在')
+    const current = library.items[position]!
+    if (current.metadataRevision !== patch.metadataRevision) throw new ConflictError('文件元数据已在其他窗口中修改', current)
+    let name = current.name
+    if (patch.name !== undefined) name = validateFileWorkbenchName(patch.name)
+    if (patch.description !== undefined && patch.description.length > 1000) throw new AppError(400, 'DESCRIPTION_TOO_LONG', '文件描述不能超过 1000 个字符')
+    if (name !== current.name) {
+      const source = this.fileWorkbenchContentPath(current)
+      const target = join(this.fileWorkbenchItemRoot(id), 'content', name)
+      if (await exists(target)) throw new AppError(409, 'NAME_CONFLICT', '同名文件已经存在')
+      await rename(source, target)
+    }
+    const updatedAt = now()
+    const next: FileWorkbenchItem = {
+      ...current,
+      name,
+      description: patch.description ?? current.description,
+      favorite: patch.favorite ?? current.favorite,
+      ...(patch.favorite === true && !current.favorite ? { favoritedAt: updatedAt } : current.favoritedAt ? { favoritedAt: current.favoritedAt } : {}),
+      extension: extname(name).toLowerCase(),
+      previewKind: getFileWorkbenchPreviewKind(name, current.mimeType),
+      updatedAt,
+      metadataRevision: current.metadataRevision + 1,
+    }
+    if (!next.favorite) delete next.favoritedAt
+    library.items[position] = next
+    library.revision += 1
+    library.updatedAt = updatedAt
+    await writeJson(join(this.fileWorkbenchItemRoot(id), 'metadata.json'), next)
+    await writeJson(this.fileWorkbenchIndexPath, library)
+    return next
+  }
+
+  async getFileWorkbenchText(id: string): Promise<FileWorkbenchTextDocument> {
+    const item = await this.getFileWorkbenchItem(id)
+    if (item.previewKind !== 'text' && item.previewKind !== 'markdown') throw new AppError(400, 'NOT_TEXT', '该文件不是可编辑文本')
+    if (item.size > FILE_WORKBENCH_TEXT_EDIT_LIMIT) throw new AppError(413, 'TEXT_TOO_LARGE', '文件过大，已禁止在浏览器中完整载入编辑器')
+    const path = this.fileWorkbenchContentPath(item)
+    const content = await readFile(path, 'utf8')
+    return { id, content, sha256: await hashFile(path), contentRevision: item.contentRevision, updatedAt: item.updatedAt }
+  }
+
+  async saveFileWorkbenchText(document: FileWorkbenchTextDocument): Promise<FileWorkbenchTextDocument> {
+    if (Buffer.byteLength(document.content, 'utf8') > FILE_WORKBENCH_TEXT_EDIT_LIMIT) throw new AppError(413, 'TEXT_TOO_LARGE', '编辑后的文本超过大小限制')
+    const library = await this.listFileWorkbenchItems()
+    const position = library.items.findIndex((value) => value.id === document.id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', '工作台文件不存在')
+    const item = library.items[position]!
+    const path = this.fileWorkbenchContentPath(item)
+    const currentHash = await hashFile(path)
+    if (item.contentRevision !== document.contentRevision || currentHash !== document.sha256) {
+      throw new ConflictError('工作台文件内容已经改变', await this.getFileWorkbenchText(document.id))
+    }
+    await atomicWrite(path, document.content)
+    const updatedAt = now()
+    const info = await stat(path)
+    const next: FileWorkbenchItem = { ...item, size: info.size, sha256: await hashFile(path), updatedAt, contentRevision: item.contentRevision + 1 }
+    library.items[position] = next
+    library.revision += 1
+    library.updatedAt = updatedAt
+    await writeJson(join(this.fileWorkbenchItemRoot(item.id), 'metadata.json'), next)
+    await writeJson(this.fileWorkbenchIndexPath, library)
+    return { id: item.id, content: document.content, sha256: next.sha256, contentRevision: next.contentRevision, updatedAt }
+  }
+
+  async getFileWorkbenchItemLocation(id: string): Promise<string> {
+    return this.fileWorkbenchContentPath(await this.getFileWorkbenchItem(id))
+  }
+
+  async trashFileWorkbenchItem(id: string): Promise<void> {
+    const item = await this.getFileWorkbenchItem(id)
+    const library = await this.listFileWorkbenchItems()
+    const trashId = randomUUID()
+    const trashRoot = join(this.trashItemsRoot, trashId)
+    await mkdir(trashRoot, { recursive: true })
+    await rename(this.fileWorkbenchItemRoot(id), join(trashRoot, 'payload'))
+    const trashItem: TrashItem = {
+      id: trashId,
+      kind: 'file-workbench',
+      displayName: item.name,
+      originalLocation: this.fileWorkbenchContentPath(item),
+      fileWorkbenchItem: item,
+      deletedAt: now(),
+      size: item.size,
+      sha256: item.sha256,
+    }
+    await writeJson(join(trashRoot, 'metadata.json'), trashItem)
+    library.items = library.items.filter((value) => value.id !== id)
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.fileWorkbenchIndexPath, library)
+    await this.addTrashItem(trashItem)
+  }
+
   private async getTrashIndex(): Promise<TrashIndex> {
     return readJson<TrashIndex>(this.trashIndexPath)
   }
@@ -755,6 +980,32 @@ export class BayToolsStore {
       }
       await this.removeTrashItem(index, item)
       return { restoredLocation: target, workspaceId: restored.id }
+    }
+
+    if (item.kind === 'file-workbench') {
+      if (!item.fileWorkbenchItem) throw new AppError(500, 'INVALID_TRASH_ITEM', '文件工作台垃圾项缺少元数据')
+      const library = await this.listFileWorkbenchItems()
+      const payload = join(itemRoot, 'payload')
+      const payloadFile = join(payload, 'content', validateFileWorkbenchName(item.fileWorkbenchItem.name))
+      if (await hashFile(payloadFile) !== item.sha256) throw new AppError(500, 'RESTORE_VERIFY_FAILED', '垃圾箱中的工作台文件校验失败')
+      let restored = item.fileWorkbenchItem
+      let targetRoot = this.fileWorkbenchItemRoot(restored.id)
+      if (await exists(targetRoot) || library.items.some((value) => value.id === restored.id)) {
+        if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID 工作台文件已经存在')
+        restored = { ...restored, id: randomUUID(), name: `${basename(restored.name, restored.extension)}（已恢复）${restored.extension}`, createdAt: now(), updatedAt: now(), metadataRevision: 1 }
+        targetRoot = this.fileWorkbenchItemRoot(restored.id)
+      }
+      await rename(payload, targetRoot)
+      if (restored.id !== item.fileWorkbenchItem.id || restored.name !== item.fileWorkbenchItem.name) {
+        await rename(join(targetRoot, 'content', item.fileWorkbenchItem.name), join(targetRoot, 'content', restored.name))
+      }
+      await writeJson(join(targetRoot, 'metadata.json'), restored)
+      library.items.push(restored)
+      library.revision += 1
+      library.updatedAt = now()
+      await writeJson(this.fileWorkbenchIndexPath, library)
+      await this.removeTrashItem(index, item)
+      return { restoredLocation: join(targetRoot, 'content', restored.name), fileWorkbenchId: restored.id }
     }
 
     if (item.kind === 'managed-markdown') {

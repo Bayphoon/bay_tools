@@ -18,6 +18,7 @@ interface AppState {
   markdownTrees: MarkdownSourceTree[]
   managedMarkdown?: ManagedMarkdownLibrary
   markdownDirty: boolean
+  fileWorkbenchDirty: boolean
   bootstrap(): Promise<void>
   refreshJson(): Promise<void>
   refreshLanguages(): Promise<void>
@@ -26,6 +27,7 @@ interface AppState {
   saveSettings(settings: AppSettings): Promise<void>
   updateJsonScratchpad(patch: JsonScratchpadPatch): void
   setMarkdownDirty(value: boolean): void
+  setFileWorkbenchDirty(value: boolean): void
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -77,6 +79,7 @@ export const useAppStore = create<AppState>((set, get) => {
     languageSources: [],
     markdownTrees: [],
     markdownDirty: false,
+    fileWorkbenchDirty: false,
     bootstrap: async () => {
       set({ loading: true, error: undefined })
       try {
@@ -106,5 +109,6 @@ export const useAppStore = create<AppState>((set, get) => {
       scheduleScratchpadSave()
     },
     setMarkdownDirty: (markdownDirty) => set({ markdownDirty }),
+    setFileWorkbenchDirty: (fileWorkbenchDirty) => set({ fileWorkbenchDirty }),
   }
 })

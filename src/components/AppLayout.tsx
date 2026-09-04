@@ -6,7 +6,9 @@ import { BAYTOOLS_NOTICE_EVENT, type AppNotice } from '../lib/clipboard'
 import { useAppStore } from '../store/appStore'
 
 export function AppLayout() {
-  const dirty = useAppStore((state) => state.markdownDirty)
+  const markdownDirty = useAppStore((state) => state.markdownDirty)
+  const fileWorkbenchDirty = useAppStore((state) => state.fileWorkbenchDirty)
+  const dirty = markdownDirty || fileWorkbenchDirty
   const [notice, setNotice] = useState<AppNotice>()
   const noticeTimer = useRef<number | undefined>(undefined)
   useEffect(() => {
@@ -25,7 +27,7 @@ export function AppLayout() {
     if (!dirty) return
     const target = event.target as HTMLElement
     const link = target.closest('a')
-    if (link && !window.confirm('当前 Markdown 有未保存修改，确定离开吗？')) {
+    if (link && !window.confirm(`${fileWorkbenchDirty ? '当前工作台文件' : '当前 Markdown'}有未保存修改，确定离开吗？`)) {
       event.preventDefault()
       event.stopPropagation()
     }

@@ -11,6 +11,7 @@ const JsonWorkspacePage = lazy(() => import('./pages/JsonWorkspacePage').then((m
 const LanguagePage = lazy(() => import('./pages/LanguagePage').then((module) => ({ default: module.LanguagePage })))
 const ServerStatusPage = lazy(() => import('./pages/ServerStatusPage').then((module) => ({ default: module.ServerStatusPage })))
 const MarkdownPage = lazy(() => import('./pages/MarkdownPage').then((module) => ({ default: module.MarkdownPage })))
+const FileWorkbenchPage = lazy(() => import('./pages/FileWorkbenchPage').then((module) => ({ default: module.FileWorkbenchPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
       <Route path="markdown" element={<MarkdownPage />} />
       <Route path="markdown/document/:documentId" element={<MarkdownPage />} />
       <Route path="markdown/:sourceId" element={<MarkdownPage />} />
+      <Route path="files" element={<FileWorkbenchPage />} />
       <Route path="settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>

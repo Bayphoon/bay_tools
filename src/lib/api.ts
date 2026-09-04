@@ -2,6 +2,10 @@ import type {
   ApiFailure,
   AppSettings,
   ColorState,
+  FileWorkbenchItem,
+  FileWorkbenchLibrary,
+  FileWorkbenchMetadataPatch,
+  FileWorkbenchTextDocument,
   JsonScratchpad,
   JsonWorkspace,
   JsonWorkspaceSummary,
@@ -41,7 +45,7 @@ async function token(): Promise<string> {
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = options?.method ?? 'GET'
   const headers = new Headers(options?.headers)
-  if (options?.body) headers.set('content-type', 'application/json')
+  if (options?.body && !(options.body instanceof FormData) && !(options.body instanceof Blob)) headers.set('content-type', 'application/json')
   if (!['GET', 'HEAD'].includes(method)) headers.set('x-baytools-token', await token())
   const response = await fetch(path, { ...options, headers })
   if (!response.ok) {
@@ -50,6 +54,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+async function uploadFile(file: File): Promise<FileWorkbenchItem> {
+  const headers = new Headers({
+    'content-type': 'application/octet-stream',
+    'x-baytools-token': await token(),
+    'x-file-name': encodeURIComponent(file.name),
+    'x-file-type': encodeURIComponent(file.type),
+    'x-file-size': String(file.size),
+    'x-file-last-modified': String(file.lastModified),
+  })
+  const response = await fetch('/api/file-workbench', { method: 'POST', headers, body: file })
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({ error: response.statusText })) as ApiFailure
+    throw new ApiError(response.status, failure.code, failure.details, failure.error)
+  }
+  return response.json() as Promise<FileWorkbenchItem>
 }
 
 const query = (values: Record<string, string>) => new URLSearchParams(values).toString()
@@ -107,10 +128,22 @@ export const localBridge: LocalBridge = {
   setLanguageFavorite: (id, key, favorite, revision) => request<LanguageSource>(`/api/languages/${id}/favorites`, { method: 'PUT', body: JSON.stringify({ key, favorite, revision }) }),
   getServerStatus: () => request<ServerStatusState>('/api/server-status'),
   syncServerStatus: (url) => request<ServerStatusState>('/api/server-status/sync', { method: 'POST', body: JSON.stringify({ url }) }),
+  listFileWorkbenchItems: () => request<FileWorkbenchLibrary>('/api/file-workbench'),
+  uploadFileWorkbenchFile: uploadFile,
+  updateFileWorkbenchMetadata: (id: string, patch: FileWorkbenchMetadataPatch) => request<FileWorkbenchItem>(`/api/file-workbench/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  getFileWorkbenchText: (id: string) => request<FileWorkbenchTextDocument>(`/api/file-workbench/${id}/text`),
+  saveFileWorkbenchText: (document: FileWorkbenchTextDocument) => request<FileWorkbenchTextDocument>(`/api/file-workbench/${document.id}/text`, { method: 'PUT', body: JSON.stringify(document) }),
+  trashFileWorkbenchItem: (id: string) => request<void>(`/api/file-workbench/${id}/trash`, { method: 'POST', body: '{}' }),
+  revealFileWorkbenchItem: (id: string) => request<void>(`/api/file-workbench/${id}/reveal`, { method: 'POST', body: '{}' }),
+  getFileWorkbenchItemPath: async (id: string) => (await request<{ path: string }>(`/api/file-workbench/${id}/location`)).path,
   listTrash: () => request<TrashItem[]>('/api/trash'),
   restoreTrash: (id, asCopy, targetDirectory) => request<RestoreResult>(`/api/trash/${id}/restore`, { method: 'POST', body: JSON.stringify({ asCopy, targetDirectory }) }),
   deleteTrash: (id) => request<void>(`/api/trash/${id}`, { method: 'DELETE' }),
   emptyTrash: () => request<void>('/api/trash', { method: 'DELETE' }),
+}
+
+export function fileWorkbenchContentUrl(id: string, download = false): string {
+  return `/api/file-workbench/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`
 }
 
 export async function assetUrl(sourceId: string, relativePath: string): Promise<string> {

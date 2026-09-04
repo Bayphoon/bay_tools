@@ -3,26 +3,32 @@ import fastifyStatic from '@fastify/static'
 import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, ColorState, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import type { AppSettings, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import { FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
 import { ServerStatusStore } from './serverStatusStore.js'
 import { BayToolsStore } from './store.js'
 import { selectWindowsFolder } from './folderDialog.js'
 import { createWindowsShortcut } from './shortcut.js'
+import { parseSingleByteRange } from './fileRange.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
-const apiVersion = 8
+const apiVersion = 9
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
   logger: { level: process.env.NODE_ENV === 'test' ? 'silent' : quietLogger ? 'error' : 'info' },
   bodyLimit: 32 * 1024 * 1024,
 })
+
+app.addContentTypeParser('application/octet-stream', (_request, payload, done) => done(null, payload))
 
 function allowedHost(value?: string): boolean {
   return Boolean(value && /^(127\.0\.0\.1|localhost):(4319|5173)$/i.test(value))
@@ -102,6 +108,70 @@ app.put<{ Params: { id: string }; Body: { key: string; favorite: boolean; revisi
 
 app.get('/api/server-status', async () => serverStatusStore.getState())
 app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) => serverStatusStore.sync(request.body?.url ?? ''))
+
+app.get('/api/file-workbench', async () => store.listFileWorkbenchItems())
+app.post<{ Body: Readable; Headers: { 'x-file-name'?: string; 'x-file-type'?: string; 'x-file-size'?: string; 'x-file-last-modified'?: string } }>('/api/file-workbench', {
+  bodyLimit: FILE_WORKBENCH_MAX_UPLOAD_SIZE + 1024,
+}, async (request) => {
+  const encodedName = request.headers['x-file-name']
+  const declaredSize = Number(request.headers['x-file-size'])
+  if (!encodedName) throw new AppError(400, 'FILE_NAME_REQUIRED', '缺少文件名')
+  let name: string
+  try { name = decodeURIComponent(encodedName) } catch { throw new AppError(400, 'INVALID_NAME', '文件名编码无效') }
+  const lastModified = Number(request.headers['x-file-last-modified'])
+  let mimeType = ''
+  try { mimeType = request.headers['x-file-type'] ? decodeURIComponent(request.headers['x-file-type']) : '' } catch { throw new AppError(400, 'INVALID_MIME_TYPE', '文件类型编码无效') }
+  return store.importFileWorkbenchFile(request.body || Readable.from([]), {
+    name,
+    mimeType,
+    size: declaredSize,
+    ...(Number.isFinite(lastModified) && lastModified > 0 && lastModified <= 8.64e15 ? { sourceLastModified: new Date(lastModified).toISOString() } : {}),
+  })
+})
+app.patch<{ Params: { id: string }; Body: FileWorkbenchMetadataPatch }>('/api/file-workbench/:id', async (request) => store.updateFileWorkbenchMetadata(request.params.id, request.body))
+app.get<{ Params: { id: string } }>('/api/file-workbench/:id/text', async (request) => store.getFileWorkbenchText(request.params.id))
+app.put<{ Params: { id: string }; Body: FileWorkbenchTextDocument }>('/api/file-workbench/:id/text', async (request) => {
+  if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', '工作台文件 ID 不匹配')
+  return store.saveFileWorkbenchText(request.body)
+})
+app.post<{ Params: { id: string } }>('/api/file-workbench/:id/trash', async (request, reply) => {
+  await store.trashFileWorkbenchItem(request.params.id)
+  return reply.status(204).send()
+})
+app.post<{ Params: { id: string } }>('/api/file-workbench/:id/reveal', async (request, reply) => {
+  await revealInExplorer(await store.getFileWorkbenchItemLocation(request.params.id), true)
+  return reply.status(204).send()
+})
+app.get<{ Params: { id: string } }>('/api/file-workbench/:id/location', async (request) => ({ path: await store.getFileWorkbenchItemLocation(request.params.id) }))
+
+const workbenchMimeTypes: Record<string, string> = {
+  '.txt': 'text/plain; charset=utf-8', '.log': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8', '.xml': 'application/xml; charset=utf-8', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+}
+app.get<{ Params: { id: string }; Querystring: { download?: string } }>('/api/file-workbench/:id/content', async (request, reply) => {
+  const item = await store.getFileWorkbenchItem(request.params.id)
+  const path = await store.getFileWorkbenchItemLocation(item.id)
+  const disposition = request.query.download === '1' ? 'attachment' : 'inline'
+  reply.header('x-content-type-options', 'nosniff')
+  reply.header('cache-control', 'no-store')
+  reply.header('accept-ranges', 'bytes')
+  reply.header('content-disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(item.name)}`)
+  reply.type(workbenchMimeTypes[item.extension] ?? 'application/octet-stream')
+  let range
+  try { range = parseSingleByteRange(request.headers.range, item.size) } catch (error) {
+    reply.header('content-range', `bytes */${item.size}`)
+    throw error
+  }
+  if (range) {
+    reply.code(206)
+    reply.header('content-range', `bytes ${range.start}-${range.end}/${item.size}`)
+    reply.header('content-length', String(range.end - range.start + 1))
+    return reply.send(createReadStream(path, range))
+  }
+  reply.header('content-length', String(item.size))
+  return reply.send(createReadStream(path))
+})
 
 app.post('/api/system/select-directory', async () => {
   if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '目录选择器当前仅支持 Windows')

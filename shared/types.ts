@@ -206,7 +206,53 @@ export interface ServerStatusState {
   servers: ServerStatusRecord[]
 }
 
-export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace'
+export type FileWorkbenchPreviewKind = 'text' | 'markdown' | 'pdf' | 'image' | 'binary'
+export const FILE_WORKBENCH_TEXT_EDIT_LIMIT = 10 * 1024 * 1024
+export const FILE_WORKBENCH_MAX_UPLOAD_SIZE = 512 * 1024 * 1024
+
+export interface FileWorkbenchItem {
+  schemaVersion: 1
+  id: string
+  importedName: string
+  name: string
+  description: string
+  favorite: boolean
+  favoritedAt?: string
+  mimeType: string
+  extension: string
+  previewKind: FileWorkbenchPreviewKind
+  size: number
+  sha256: string
+  createdAt: string
+  updatedAt: string
+  sourceLastModified?: string
+  contentRevision: number
+  metadataRevision: number
+}
+
+export interface FileWorkbenchLibrary {
+  schemaVersion: 1
+  updatedAt: string
+  revision: number
+  items: FileWorkbenchItem[]
+}
+
+export interface FileWorkbenchTextDocument {
+  id: string
+  content: string
+  sha256: string
+  contentRevision: number
+  updatedAt: string
+}
+
+export interface FileWorkbenchMetadataPatch {
+  name?: string
+  description?: string
+  favorite?: boolean
+  metadataRevision: number
+}
+
+export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace' | 'file-workbench'
 
 export interface TrashItem {
   id: string
@@ -216,6 +262,7 @@ export interface TrashItem {
   originalRelativePath?: string
   sourceId?: string
   managedDocument?: ManagedMarkdownDocumentSummary
+  fileWorkbenchItem?: FileWorkbenchItem
   deletedAt: string
   size: number
   sha256: string
@@ -224,6 +271,7 @@ export interface TrashItem {
 export interface RestoreResult {
   restoredLocation: string
   workspaceId?: string
+  fileWorkbenchId?: string
 }
 
 export type ShortcutLocation = 'desktop' | 'start-menu'
@@ -287,6 +335,14 @@ export interface LocalBridge {
   setLanguageFavorite(id: string, key: string, favorite: boolean, revision: number): Promise<LanguageSource>
   getServerStatus(): Promise<ServerStatusState>
   syncServerStatus(url: string): Promise<ServerStatusState>
+  listFileWorkbenchItems(): Promise<FileWorkbenchLibrary>
+  uploadFileWorkbenchFile(file: File): Promise<FileWorkbenchItem>
+  updateFileWorkbenchMetadata(id: string, patch: FileWorkbenchMetadataPatch): Promise<FileWorkbenchItem>
+  getFileWorkbenchText(id: string): Promise<FileWorkbenchTextDocument>
+  saveFileWorkbenchText(document: FileWorkbenchTextDocument): Promise<FileWorkbenchTextDocument>
+  trashFileWorkbenchItem(id: string): Promise<void>
+  revealFileWorkbenchItem(id: string): Promise<void>
+  getFileWorkbenchItemPath(id: string): Promise<string>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>

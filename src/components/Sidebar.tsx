@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, Files, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -244,6 +244,7 @@ export function Sidebar() {
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : <MarkdownNodes sourceId={source.id} nodes={source.children} onChanged={refreshMarkdown} />)}
         </div>})}</div>}
       </div>
+      <NavLink to="/files" className="nav-row"><Files size={16} /><span>文件工作台</span></NavLink>
       <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
       <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
       <div className="nav-group">

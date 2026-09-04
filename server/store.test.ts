@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { BayToolsStore } from './store.js'
+import { Readable } from 'node:stream'
+import { BayToolsStore, getFileWorkbenchPreviewKind, validateFileWorkbenchName } from './store.js'
 import { ConflictError } from './errors.js'
 
 describe('BayToolsStore', () => {
@@ -133,5 +134,57 @@ describe('BayToolsStore', () => {
     await writeFile(join(docs, 'a.md'), 'two')
     await expect(store.saveMarkdownDocument({ ...document, content: 'three' })).rejects.toBeInstanceOf(ConflictError)
     await expect(store.getMarkdownDocument(source.id, '../outside.md')).rejects.toMatchObject({ code: 'INVALID_PATH' })
+  })
+
+  it('imports file workbench bytes unchanged and updates metadata independently', async () => {
+    const bytes = Buffer.from([0, 1, 2, 250, 255, 10])
+    const item = await store.importFileWorkbenchFile(Readable.from(bytes), {
+      name: '原始图片.png',
+      mimeType: 'image/png',
+      size: bytes.byteLength,
+      sourceLastModified: '2026-09-04T02:00:00.000Z',
+    })
+    expect(item.importedName).toBe('原始图片.png')
+    expect(item.previewKind).toBe('image')
+    expect(await readFile(await store.getFileWorkbenchItemLocation(item.id))).toEqual(bytes)
+
+    const described = await store.updateFileWorkbenchMetadata(item.id, { description: '界面参考图', favorite: true, metadataRevision: item.metadataRevision })
+    expect(described.description).toBe('界面参考图')
+    expect(described.favorite).toBe(true)
+    expect(described.metadataRevision).toBe(2)
+    expect(described.contentRevision).toBe(1)
+    expect(described.sha256).toBe(item.sha256)
+    await expect(store.updateFileWorkbenchMetadata(item.id, { description: '过期描述', metadataRevision: item.metadataRevision })).rejects.toBeInstanceOf(ConflictError)
+    await expect(store.updateFileWorkbenchMetadata(item.id, { description: 'x'.repeat(1001), metadataRevision: described.metadataRevision })).rejects.toMatchObject({ code: 'DESCRIPTION_TOO_LONG' })
+
+    const renamed = await store.updateFileWorkbenchMetadata(item.id, { name: '界面参考.png', metadataRevision: described.metadataRevision })
+    expect(renamed.name).toBe('界面参考.png')
+    expect(renamed.importedName).toBe('原始图片.png')
+    expect(await readFile(await store.getFileWorkbenchItemLocation(item.id))).toEqual(bytes)
+  })
+
+  it('saves text with revision conflicts and restores workbench files from trash', async () => {
+    const source = Buffer.from('第一版', 'utf8')
+    const item = await store.importFileWorkbenchFile(Readable.from(source), { name: 'notes.md', mimeType: 'text/markdown', size: source.byteLength })
+    const document = await store.getFileWorkbenchText(item.id)
+    const saved = await store.saveFileWorkbenchText({ ...document, content: '第二版' })
+    expect(saved.contentRevision).toBe(2)
+    await expect(store.saveFileWorkbenchText({ ...document, content: '过期写入' })).rejects.toBeInstanceOf(ConflictError)
+
+    await store.trashFileWorkbenchItem(item.id)
+    expect((await store.listFileWorkbenchItems()).items).toHaveLength(0)
+    const trash = (await store.listTrash()).find((value) => value.kind === 'file-workbench')!
+    const restored = await store.restoreTrash(trash.id)
+    expect(restored.fileWorkbenchId).toBe(item.id)
+    expect((await store.getFileWorkbenchText(item.id)).content).toBe('第二版')
+  })
+
+  it('rejects unsafe workbench names and classifies supported previews', () => {
+    expect(() => validateFileWorkbenchName('../secret.txt')).toThrow()
+    expect(() => validateFileWorkbenchName('bad?.txt')).toThrow()
+    expect(() => validateFileWorkbenchName('CON.txt')).toThrow()
+    expect(getFileWorkbenchPreviewKind('README.md')).toBe('markdown')
+    expect(getFileWorkbenchPreviewKind('book.pdf')).toBe('pdf')
+    expect(getFileWorkbenchPreviewKind('archive.zip')).toBe('binary')
   })
 })
