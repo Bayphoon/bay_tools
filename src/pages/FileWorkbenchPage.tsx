@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import Editor from '@monaco-editor/react'
-import { ChevronDown, ChevronRight, Copy, Download, File, FileCode2, FileImage, FileText, FolderOpen, MoreHorizontal, Pencil, Plus, Save, Search, Star, X, ZoomIn, ZoomOut } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { ChevronDown, ChevronRight, ClipboardPaste, Copy, Download, File, FileCode2, FileImage, FileText, FolderOpen, MoreHorizontal, Pencil, Plus, Save, Search, Star, X, ZoomIn, ZoomOut } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
@@ -10,6 +10,7 @@ import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, type Fi
 import { ToolButton } from '../components/ui'
 import { ApiError, fileWorkbenchContentUrl, localBridge } from '../lib/api'
 import { copyFilePath, showAppNotice } from '../lib/clipboard'
+import { applyFileExtension, candidatesFromClipboardData, classifyDragTypes, clipboardReadErrorMessage, createImportFile, imageImportExtension, isEditableTarget, readCurrentClipboard, suggestedImportName, textImportExtension, textImportFormatOptions, validateImportFileName, type ClipboardImportCandidate, type DragContentKind, type TextImportFormat } from '../lib/clipboardImport'
 import { useAppStore } from '../store/appStore'
 
 type MarkdownMode = 'source' | 'preview' | 'split'
@@ -80,6 +81,76 @@ function MarkdownPreview({ content }: { content: string }) {
   return <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]}>{content}</ReactMarkdown></article>
 }
 
+export function ImportClipboardDialog({ candidates, uploading, onClose, onImport }: {
+  candidates: ClipboardImportCandidate[]
+  uploading: boolean
+  onClose: () => void
+  onImport: (file: File) => Promise<boolean>
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [format, setFormat] = useState<TextImportFormat>('auto')
+  const [name, setName] = useState(() => suggestedImportName(candidates[0]))
+  const [localError, setLocalError] = useState('')
+  const [previewUrl, setPreviewUrl] = useState<string>()
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const candidate = candidates[selectedIndex]
+
+  useEffect(() => { nameInputRef.current?.focus(); nameInputRef.current?.select() }, [])
+  useEffect(() => {
+    if (candidate.kind !== 'image') { setPreviewUrl(undefined); return }
+    const url = URL.createObjectURL(candidate.blob)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [candidate])
+
+  const extension = candidate.kind === 'image' ? (imageImportExtension(candidate.mimeType) ?? '.png') : textImportExtension(format, candidate.text)
+  const finalName = applyFileExtension(name, extension)
+  const fileNameError = validateImportFileName(finalName)
+  const size = candidate.kind === 'image' ? candidate.blob.size : new TextEncoder().encode(candidate.text).byteLength
+  const tooLarge = candidate.kind === 'text' ? size > FILE_WORKBENCH_TEXT_EDIT_LIMIT : size > FILE_WORKBENCH_MAX_UPLOAD_SIZE
+  const sizeError = tooLarge ? (candidate.kind === 'text' ? '文本超过 10 MiB 的导入限制' : '图片超过 512 MiB 的单文件限制') : ''
+  const previewLines = candidate.kind === 'text' ? candidate.text.split(/\r?\n/, 11) : []
+  const previewText = previewLines.slice(0, 10).join('\n')
+  const previewTruncated = candidate.kind === 'text' && (previewLines.length > 10 || previewText.length < candidate.text.length)
+
+  const selectCandidate = (index: number) => {
+    const next = candidates[index]
+    setSelectedIndex(index)
+    setFormat('auto')
+    setName(suggestedImportName(next))
+    setLocalError('')
+  }
+  const changeFormat = (next: TextImportFormat) => {
+    if (candidate.kind !== 'text') return
+    setFormat(next)
+    setName((value) => applyFileExtension(value, textImportExtension(next, candidate.text)))
+    setLocalError('')
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (uploading || fileNameError || tooLarge) return
+    try {
+      const file = createImportFile(candidate, name, format)
+      if (await onImport(file)) onClose()
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : '无法创建导入文件')
+    }
+  }
+
+  return <div className="file-import-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !uploading) onClose() }}>
+    <form className="file-import-dialog" role="dialog" aria-modal="true" aria-labelledby="file-import-title" onSubmit={(event) => void submit(event)} onKeyDown={(event) => { if (event.key === 'Escape' && !uploading) { event.preventDefault(); onClose() } }}>
+      <header><div><h2 id="file-import-title">{candidate.source === 'drop' ? '添加拖入文字' : '添加剪贴板内容'}</h2><p>确认后会作为独立副本保存到文件工作台。</p></div><button type="button" className="icon-button" aria-label="关闭导入窗口" disabled={uploading} onClick={onClose}><X size={17} /></button></header>
+      {candidates.length > 1 && <div className="file-import-candidates" role="tablist" aria-label="剪贴板内容类型">{candidates.map((item, index) => <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'active' : ''} key={`${item.kind}-${index}`} onClick={() => selectCandidate(index)}>{item.kind === 'image' ? <FileImage size={15} /> : <FileText size={15} />}{item.kind === 'image' ? '图片' : '文字'}</button>)}</div>}
+      <label className="file-import-field"><span>文件名</span><input ref={nameInputRef} value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setLocalError('') }} /></label>
+      {candidate.kind === 'text' && <label className="file-import-field"><span>格式</span><select value={format} onChange={(event) => changeFormat(event.target.value as TextImportFormat)}>{textImportFormatOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
+      <div className="file-import-result">将保存为 <strong>{finalName}</strong><span>{formatSize(size)}</span></div>
+      <section className={`file-import-preview ${candidate.kind}`} aria-label="导入内容预览">{candidate.kind === 'image' ? <>{previewUrl && <img src={previewUrl} alt="剪贴板图片预览" />}<div><span>{candidate.mimeType}</span><span>{formatSize(candidate.blob.size)}</span></div></> : <pre>{previewText}{previewTruncated ? '\n…' : ''}</pre>}</section>
+      {(fileNameError || sizeError || localError) && <div className="file-import-error" role="alert">{fileNameError || sizeError || localError}</div>}
+      <footer><span>{candidate.kind === 'text' ? '保留原始文字、换行和 Unicode 内容' : '按剪贴板实际图片格式保存'}</span><ToolButton type="button" disabled={uploading} onClick={onClose}>取消</ToolButton><ToolButton type="submit" className="primary" disabled={uploading || Boolean(fileNameError) || tooLarge}>{uploading ? '正在添加…' : '添加并打开'}</ToolButton></footer>
+    </form>
+  </div>
+}
+
 function FileContent({ item, document, draft, dirty, loading, error, markdownMode, zoom, onDraft, onSave, onMarkdownMode, onZoom }: {
   item: FileWorkbenchItem; document?: FileWorkbenchTextDocument; draft: string; dirty: boolean; loading: boolean; error: string; markdownMode: MarkdownMode; zoom: number
   onDraft: (value: string) => void; onSave: () => void; onMarkdownMode: (mode: MarkdownMode) => void; onZoom: (zoom: number) => void
@@ -110,11 +181,15 @@ export function FileWorkbenchPage() {
   const [search, setSearch] = useState('')
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [allOpen, setAllOpen] = useState(true)
-  const [dragging, setDragging] = useState(false)
+  const [dragging, setDragging] = useState<DragContentKind>()
   const [uploading, setUploading] = useState(false)
+  const [clipboardReading, setClipboardReading] = useState(false)
+  const [importCandidates, setImportCandidates] = useState<ClipboardImportCandidate[]>()
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>('split')
   const [zoom, setZoom] = useState(0)
   const [descriptionEditingId, setDescriptionEditingId] = useState<string>()
+  const uploadingRef = useRef(false)
+  const clipboardReadingRef = useRef(false)
 
   const refresh = async () => setLibrary(await localBridge.listFileWorkbenchItems())
   useEffect(() => { void refresh().catch((value) => setError(value instanceof Error ? value.message : '文件库加载失败')) }, [])
@@ -172,8 +247,9 @@ export function FileWorkbenchPage() {
     try { await localBridge.trashFileWorkbenchItem(item.id); closeTab(item.id, true); await refresh(); showAppNotice({ kind: 'success', message: '文件已移入垃圾箱' }) }
     catch (value) { setError(value instanceof Error ? value.message : '删除失败') }
   }
-  const upload = async (files: File[]) => {
-    if (!files.length || uploading) return
+  const upload = async (files: File[]): Promise<boolean> => {
+    if (!files.length || uploadingRef.current) return false
+    uploadingRef.current = true
     setUploading(true); setError('')
     let last: FileWorkbenchItem | undefined
     let completed = 0
@@ -185,7 +261,42 @@ export function FileWorkbenchPage() {
       }
       showAppNotice({ kind: 'success', message: `已添加 ${completed} 个文件` })
     } catch (value) { setError(value instanceof Error ? value.message : '文件添加失败') }
-    finally { await refresh(); if (last) openFile(last); setUploading(false); if (inputRef.current) inputRef.current.value = '' }
+    finally {
+      try { await refresh(); if (last) openFile(last) }
+      catch (value) { setError(value instanceof Error ? value.message : '文件库刷新失败') }
+      finally {
+        uploadingRef.current = false
+        setUploading(false)
+        if (inputRef.current) inputRef.current.value = ''
+      }
+    }
+    return completed === files.length
+  }
+
+  const openImportCandidates = (candidates: ClipboardImportCandidate[]) => {
+    if (!candidates.length) {
+      setError('剪贴板中没有可导入的文字或图片')
+      showAppNotice({ kind: 'error', message: '剪贴板中没有可导入的文字或图片' })
+      return
+    }
+    setError('')
+    setImportCandidates(candidates)
+  }
+  const readClipboard = async () => {
+    if (clipboardReadingRef.current || uploadingRef.current || importCandidates) return
+    clipboardReadingRef.current = true
+    setClipboardReading(true)
+    setError('')
+    try {
+      openImportCandidates(await readCurrentClipboard())
+    } catch (value) {
+      const message = clipboardReadErrorMessage(value)
+      setError(message)
+      showAppNotice({ kind: 'error', message })
+    } finally {
+      clipboardReadingRef.current = false
+      setClipboardReading(false)
+    }
   }
   const saveActive = async () => {
     if (!activeItem) return
@@ -201,11 +312,53 @@ export function FileWorkbenchPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   })
-  const onDrop = (event: DragEvent) => { event.preventDefault(); setDragging(false); void upload(Array.from(event.dataTransfer.files)) }
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.repeat || !event.ctrlKey || !event.shiftKey || event.key.toLowerCase() !== 'v' || isEditableTarget(event.target)) return
+      event.preventDefault()
+      void readClipboard()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  })
 
-  return <div className="file-workbench-page" onDragEnter={(event) => { event.preventDefault(); setDragging(true) }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false) }} onDrop={onDrop}>
-    <header className="file-workbench-header"><div><h1>文件工作台</h1><span>{library?.items.length ?? 0} 个文件 · {formatSize(totalSize)}</span></div><ToolButton className="primary" disabled={uploading} onClick={() => inputRef.current?.click()}><Plus size={15} />{uploading ? '正在添加…' : '添加文件'}</ToolButton><input ref={inputRef} hidden type="file" multiple onChange={(event) => void upload(Array.from(event.target.files ?? []))} /></header>
-    {error && <div className="file-workbench-error">{error}<button onClick={() => setError('')}><X size={14} /></button></div>}
+  useEffect(() => {
+    const handler = (event: ClipboardEvent) => {
+      if (!event.clipboardData || isEditableTarget(event.target) || clipboardReadingRef.current || uploadingRef.current || importCandidates) return
+      const candidates = candidatesFromClipboardData(event.clipboardData)
+      if (!candidates.length) return
+      event.preventDefault()
+      openImportCandidates(candidates)
+    }
+    document.addEventListener('paste', handler)
+    return () => document.removeEventListener('paste', handler)
+  })
+  const onDrop = (event: DragEvent) => {
+    event.preventDefault()
+    const kind = classifyDragTypes(Array.from(event.dataTransfer.types))
+    setDragging(undefined)
+    if (kind === 'files') {
+      void upload(Array.from(event.dataTransfer.files))
+      return
+    }
+    if (kind === 'text') {
+      const text = event.dataTransfer.getData('text/plain')
+      if (text) openImportCandidates([{ kind: 'text', source: 'drop', text }])
+      else setError('拖入的文字为空，未创建文件')
+      return
+    }
+    setError('当前拖入内容无法识别，仅支持文件或纯文本')
+  }
+
+  const dragCopy = dragging === 'files'
+    ? { title: '松开以复制文件', detail: '文件将复制，源文件不会改变', icon: <File size={50} /> }
+    : dragging === 'text'
+      ? { title: '松开以创建文本文件', detail: '确认名称和格式后添加到工作台', icon: <FileText size={50} /> }
+      : { title: '当前拖入内容无法识别', detail: '仅支持文件或纯文本', icon: <X size={50} /> }
+
+  return <div className="file-workbench-page" onDragEnter={(event) => { event.preventDefault(); setDragging(classifyDragTypes(Array.from(event.dataTransfer.types))) }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; setDragging(classifyDragTypes(Array.from(event.dataTransfer.types))) }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(undefined) }} onDrop={onDrop}>
+    <header className="file-workbench-header"><div><h1>文件工作台</h1><span>{library?.items.length ?? 0} 个文件 · {formatSize(totalSize)}</span></div><ToolButton disabled={uploading || clipboardReading} onClick={() => void readClipboard()}><ClipboardPaste size={15} />{clipboardReading ? '正在读取…' : '从剪贴板添加'}</ToolButton><ToolButton className="primary" disabled={uploading || clipboardReading} onClick={() => inputRef.current?.click()}><Plus size={15} />{uploading ? '正在添加…' : '添加文件'}</ToolButton><input ref={inputRef} hidden type="file" multiple onChange={(event) => void upload(Array.from(event.target.files ?? []))} /></header>
+    {error && <div className="file-workbench-error" role="alert">{error}<button aria-label="关闭错误提示" onClick={() => setError('')}><X size={14} /></button></div>}
     <div className="file-workbench-shell">
       <aside className="file-library"><label className="file-library-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名或描述" /></label>
         <section><button className="file-library-group" onClick={() => setFavoritesOpen((value) => !value)}>{favoritesOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Star size={15} /><strong>收藏文件</strong><span>{favorites.length}</span></button>{favoritesOpen && <div>{favorites.length ? favorites.map((item) => <FileRow key={`favorite-${item.id}`} item={item} active={activeId === item.id} onOpen={() => openFile(item)} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />) : <p className="file-library-empty">收藏的文件会固定显示在这里</p>}</div>}</section>
@@ -221,6 +374,7 @@ export function FileWorkbenchPage() {
         </div>}
       </main>
     </div>
-    {dragging && <div className="file-drop-overlay"><File size={50} /><strong>松开鼠标，添加到工作台</strong><span>文件将复制，源文件不会改变</span></div>}
+    {dragging && <div className={`file-drop-overlay ${dragging}`}>{dragCopy.icon}<strong>{dragCopy.title}</strong><span>{dragCopy.detail}</span></div>}
+    {importCandidates && <ImportClipboardDialog candidates={importCandidates} uploading={uploading} onClose={() => setImportCandidates(undefined)} onImport={(file) => upload([file])} />}
   </div>
 }
