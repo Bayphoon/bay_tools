@@ -291,6 +291,16 @@ export interface ShortcutResult {
   replaced: boolean
 }
 
+export interface ServiceSession {
+  apiVersion: number
+  sourceVersion: string | null
+  serviceId: string
+}
+
+export interface ServiceRestartResult {
+  previousServiceId: string
+}
+
 export type PersonalDataSyncState = 'unavailable' | 'ready' | 'runtime-newer' | 'snapshot-newer' | 'diverged'
 
 export interface PersonalDataStatus {
@@ -347,6 +357,8 @@ export interface LocalBridge {
   updateColors(state: ColorState): Promise<ColorState>
   selectDirectory(): Promise<string | null>
   createShortcut(location: ShortcutLocation): Promise<ShortcutResult>
+  getServiceSession(): Promise<ServiceSession>
+  restartService(): Promise<ServiceRestartResult>
   getPersonalDataStatus(): Promise<PersonalDataStatus>
   syncPersonalData(force?: boolean): Promise<PersonalDataSyncResult>
   restorePersonalData(confirm: boolean): Promise<PersonalDataSyncResult>

@@ -23,7 +23,9 @@ const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 13
+const apiVersion = 14
+const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
+const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -71,7 +73,7 @@ app.setErrorHandler((error, _request, reply) => {
   reply.status(appError.statusCode).send({ error: appError.message, code: appError.code, details: appError.details })
 })
 
-app.get('/api/session', async () => ({ token: sessionToken, apiVersion }))
+app.get('/api/session', async () => ({ token: sessionToken, apiVersion, sourceVersion, serviceId }))
 
 app.get('/api/settings', async () => store.getSettings())
 app.put<{ Body: AppSettings }>('/api/settings', async (request) => store.updateSettings(request.body))
@@ -204,6 +206,18 @@ app.post<{ Body: { location?: ShortcutLocation } }>('/api/system/shortcut', asyn
   const location = request.body?.location
   if (location !== 'desktop' && location !== 'start-menu') throw new AppError(400, 'INVALID_SHORTCUT_LOCATION', '快捷方式位置无效')
   return createWindowsShortcut(projectRoot, location)
+})
+app.post('/api/system/restart', async (_request, reply) => {
+  if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '服务重启功能当前仅支持 Windows')
+  const launcher = join(projectRoot, 'BayTools.vbs')
+  const wscript = process.env.SystemRoot ? join(process.env.SystemRoot, 'System32', 'wscript.exe') : 'wscript.exe'
+  const timer = setTimeout(() => {
+    const child = spawn(wscript, [launcher, '/restart'], { cwd: projectRoot, detached: true, stdio: 'ignore', windowsHide: true })
+    child.once('error', (error) => app.log.error(error))
+    child.unref()
+  }, 200)
+  timer.unref()
+  return reply.status(202).send({ previousServiceId: serviceId })
 })
 
 app.get('/api/personal-data/status', async () => personalDataManager.getStatus())

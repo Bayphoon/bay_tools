@@ -1,5 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs'
-import { LayoutGrid, Monitor, Moon, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
+import { LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
@@ -22,6 +22,8 @@ export function SettingsPage() {
   const [shortcutBusy, setShortcutBusy] = useState<ShortcutLocation>()
   const [shortcutMessage, setShortcutMessage] = useState('')
   const [shortcutError, setShortcutError] = useState('')
+  const [serviceRestarting, setServiceRestarting] = useState(false)
+  const [serviceError, setServiceError] = useState('')
   const loadTrash = async () => setTrash(await localBridge.listTrash())
   useEffect(() => { void loadTrash().catch((value) => setError(value.message)) }, [])
   useEffect(() => setDraft(settings), [settings])
@@ -46,6 +48,31 @@ export function SettingsPage() {
       setShortcutError(value instanceof Error ? value.message : '快捷方式创建失败')
     } finally {
       setShortcutBusy(undefined)
+    }
+  }
+  const restartService = async () => {
+    if (!window.confirm('重启期间 BayTools 会短暂断开，未保存的页面内容可能丢失。是否继续？')) return
+    setServiceRestarting(true)
+    setServiceError('')
+    try {
+      const { previousServiceId } = await localBridge.restartService()
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        try {
+          const session = await localBridge.getServiceSession()
+          if (session.serviceId !== previousServiceId) {
+            window.location.reload()
+            return
+          }
+        } catch {
+          // 服务重启窗口内连接失败是正常现象，继续等待新进程。
+        }
+      }
+      setServiceError('服务重启超时，请查看 BayTools 启动窗口或日志。')
+    } catch (value) {
+      setServiceError(value instanceof Error ? value.message : '服务重启失败')
+    } finally {
+      setServiceRestarting(false)
     }
   }
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
@@ -88,6 +115,7 @@ export function SettingsPage() {
         {shortcutMessage && <div className="shortcut-result" role="status">{shortcutMessage}</div>}
         <InlineError>{shortcutError}</InlineError>
         <section className="settings-section shortcut-note"><strong>固定到任务栏</strong><p>先创建开始菜单快捷方式，再在开始菜单中右键 BayTools，选择“固定到任务栏”。Windows 11 不允许网页直接完成固定操作。</p></section>
+        <section className="settings-section shortcut-note"><strong>后台服务</strong><p>关闭浏览器页签不会停止 BayTools。重新运行快捷方式会检查服务健康状态、API 版本和源码版本，并在需要时自动重启；也可以在这里手动重启。</p><ToolButton disabled={serviceRestarting} onClick={() => void restartService()}><RefreshCw size={14} />{serviceRestarting ? '正在重启' : '重启后台服务'}</ToolButton><InlineError>{serviceError}</InlineError></section>
       </Tabs.Content>
       <Tabs.Content value="trash" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>
