@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-03T09:02:00.349Z",
+  "revision": 10,
+  "text": "{\n  \"kingName\": \"13周淑英436\",\n  \"kingAbbr\": \"shep\",\n  \"actType\": 1,\n  \"_id\": 180,\n  \"list\": [\n    {\n      \"toUid\": \"178771624517413\",\n      \"name\": \"我是13国王\",\n      \"presentId\": 10001,\n      \"abbr\": \"shep\",\n      \"sendTime\": 1788362382109\n    },\n    {\n      \"toUid\": \"7039035670000013\",\n      \"name\": \"7039035670\",\n      \"presentId\": 10002,\n      \"abbr\": \"shep\",\n      \"sendTime\": 1788362427068\n    }\n  ],\n  \"kingUid\": \"178781917021613\",\n  \"_time\": 0\n}",
+  "mode": "text",
+  "autoFormat": true
+}

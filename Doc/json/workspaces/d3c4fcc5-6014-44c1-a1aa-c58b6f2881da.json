@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "id": "d3c4fcc5-6014-44c1-a1aa-c58b6f2881da",
+  "title": "违法排行",
+  "createdAt": "2026-09-01T10:34:00.167Z",
+  "updatedAt": "2026-09-01T10:34:10.145Z",
+  "revision": 5,
+  "panes": [
+    {
+      "id": "21f655bf-3361-4e87-81e2-11971f356d7a",
+      "title": "JSON 1",
+      "text": "{\n  \"rankAnnounced\": false,\n  \"updateTime\": 1788287640475,\n  \"_id\": 194,\n  \"list\": [\n    {\n      \"uid\": \"178771624517413\",\n      \"count\": 1,\n      \"player\": {\n        \"allianceId\": \"313974fcd15e4bd78b3c9f5bf681b223\",\n        \"uid\": \"178771624517413\",\n        \"country\": \"SG\",\n        \"headSkinET\": 1789884784739,\n        \"headSkinId\": 20002,\n        \"name\": \"我是13国王\",\n        \"headPicVer\": 0,\n        \"kingGender\": 2,\n        \"allianceName\": \"你来找我征税\",\n        \"abbr\": \"shep\",\n        \"headPic\": \"\"\n      }\n    }\n  ],\n  \"serverId\": 13,\n  \"_time\": 1\n}",
+      "view": "text"
+    },
+    {
+      "id": "790f18c8-e7f1-4042-8960-3668b9996050",
+      "title": "JSON 2",
+      "text": "{\n  \n}",
+      "view": "text"
+    }
+  ],
+  "diffSelection": {
+    "basePaneId": "21f655bf-3361-4e87-81e2-11971f356d7a",
+    "targetPaneId": "790f18c8-e7f1-4042-8960-3668b9996050"
+  }
+}

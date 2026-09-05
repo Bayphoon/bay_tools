@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "id": "daa36fa4-a77c-4121-a881-ea16927217a5",
+  "title": "Rule Edit",
+  "createdAt": "2026-09-01T06:46:22.995Z",
+  "updatedAt": "2026-09-02T03:33:46.040Z",
+  "revision": 13,
+  "panes": [
+    {
+      "id": "43fda51b-2885-45bf-a450-de732c54848d",
+      "title": "JSON 1",
+      "text": "{\n  \"rankAnnounced\": false,\n  \"rules\": [\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 1788456766552,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1001,\n      \"enabled\": 0\n    },\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 1788456767683,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1002,\n      \"enabled\": 1\n    },\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 0,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1003,\n      \"enabled\": 0\n    }\n  ],\n  \"_id\": 171,\n  \"serverId\": 13,\n  \"_time\": 1\n}",
+      "view": "text"
+    },
+    {
+      "id": "2a162e25-1e40-4e7e-85b6-4839f42c801a",
+      "title": "JSON 2",
+      "text": "{}",
+      "view": "text"
+    }
+  ],
+  "diffSelection": {
+    "basePaneId": "43fda51b-2885-45bf-a450-de732c54848d",
+    "targetPaneId": "2a162e25-1e40-4e7e-85b6-4839f42c801a"
+  }
+}

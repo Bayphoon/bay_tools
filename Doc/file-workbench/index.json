@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-04T09:50:06.823Z",
+  "revision": 43,
+  "items": [
+    {
+      "schemaVersion": 1,
+      "id": "87ca8c6e-7d38-466e-acc0-82d6f10ba57b",
+      "importedName": "CLAUDE.md",
+      "name": "CLAUDE.md",
+      "description": "",
+      "favorite": false,
+      "mimeType": "text/markdown",
+      "extension": ".md",
+      "previewKind": "markdown",
+      "size": 4818,
+      "sha256": "c9ffa460846b3cca9ded417cb111e9dd8829412de93fd307e3fd52c692e0e1aa",
+      "createdAt": "2026-09-04T06:29:58.916Z",
+      "updatedAt": "2026-09-04T06:29:58.916Z",
+      "sourceLastModified": "2026-09-04T06:29:41.765Z",
+      "contentRevision": 1,
+      "metadataRevision": 1
+    },
+    {
+      "schemaVersion": 1,
+      "id": "6d15530d-7cde-4fb7-87b5-81f1f95ce105",
+      "importedName": "Codex AGENTS.txt",
+      "name": "Codex AGENTS 备份.md",
+      "description": "",
+      "favorite": false,
+      "mimeType": "text/plain;charset=utf-8",
+      "extension": ".md",
+      "previewKind": "markdown",
+      "size": 4197,
+      "sha256": "1415c07c5ddf4c975032107517163c241cfe6ddf7aa320c75d12064cef34bb0f",
+      "createdAt": "2026-09-04T08:52:57.006Z",
+      "updatedAt": "2026-09-04T09:12:14.979Z",
+      "sourceLastModified": "2026-09-04T08:52:57.003Z",
+      "contentRevision": 1,
+      "metadataRevision": 3
+    },
+    {
+      "schemaVersion": 1,
+      "id": "335fe9be-8684-4ca6-991e-6f47ba8b735c",
+      "importedName": "二进制测试.txt",
+      "name": "二进制测试.txt",
+      "description": "",
+      "favorite": false,
+      "mimeType": "text/plain;charset=utf-8",
+      "extension": ".txt",
+      "previewKind": "text",
+      "size": 257,
+      "sha256": "fd9933c2f332ee0b9f517f5f8ac742bd5f1633fcdbfe2750f9ac35c2c8a52905",
+      "createdAt": "2026-09-04T09:45:44.192Z",
+      "updatedAt": "2026-09-04T09:50:06.823Z",
+      "sourceLastModified": "2026-09-04T09:45:44.188Z",
+      "contentRevision": 4,
+      "metadataRevision": 1
+    }
+  ]
+}

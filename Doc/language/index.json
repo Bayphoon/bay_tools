@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-09-02T04:46:07.113Z",
+  "revision": 23,
+  "sources": [
+    {
+      "schemaVersion": 1,
+      "id": "e2db3a94-0e3a-467f-9f06-c1352913c7d8",
+      "title": "zh_CN.txt",
+      "url": "http://wb-jenkins-client.rivergame.net:8080/view/K_%E5%AE%A2%E6%88%B7%E7%AB%AF%E9%85%8D%E7%BD%AE_%E5%A4%9A%E8%AF%AD%E8%A8%80/job/K_%E5%AE%A2%E6%88%B7%E7%AB%AF%E5%8F%91%E5%B8%83%E5%A4%9A%E8%AF%AD%E8%A8%80Dev/ws/Client_Script/locale/output/zh_CN.txt",
+      "createdAt": "2026-09-02T03:58:59.909Z",
+      "updatedAt": "2026-09-02T04:46:07.113Z",
+      "entryCount": 65319,
+      "revision": 18,
+      "favorites": [
+        {
+          "key": "btn_cancel",
+          "content": "取消",
+          "favoritedAt": "2026-09-02T04:46:07.113Z"
+        }
+      ],
+      "fileName": "zh_CN.txt",
+      "lastSyncedAt": "2026-09-02T04:23:15.231Z"
+    }
+  ]
+}

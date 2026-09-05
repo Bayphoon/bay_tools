@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "id": "15cc9225-367c-41ef-84e0-de9d17fd418f",
+  "title": "Rule Info",
+  "createdAt": "2026-09-01T05:00:49.910Z",
+  "updatedAt": "2026-09-03T06:11:12.472Z",
+  "revision": 73,
+  "panes": [
+    {
+      "id": "3974bc9d-2c55-401d-bb52-7df965c0f4ee",
+      "title": "JSON 1",
+      "text": "{\n  \"rankAnnounced\": false,\n  \"rules\": [\n    {\n      \"napParam\": 30,\n      \"coolDownTime\": 1788535394108,\n      \"scope\": 2,\n      \"extra\": {},\n      \"ruleId\": 1001,\n      \"enabled\": 1\n    },\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 0,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1002,\n      \"enabled\": 0\n    },\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 0,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1003,\n      \"enabled\": 0\n    }\n  ],\n  \"_id\": 154,\n  \"serverId\": 13,\n  \"_time\": 0\n}",
+      "view": "text"
+    },
+    {
+      "id": "5e5af5df-ae4e-4dbe-ad30-399b46408eed",
+      "title": "JSON 2",
+      "text": "{\n  \"rankAnnounced\": false,\n  \"rules\": [\n    {\n      \"napParam\": 3,\n      \"coolDownTime\": 1788535394108,\n      \"scope\": 2,\n      \"extra\": {},\n      \"ruleId\": 1001,\n      \"enabled\": 1\n    },\n    {\n      \"napParam\": 88,\n      \"coolDownTime\": 1788535468642,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1002,\n      \"enabled\": 1\n    },\n    {\n      \"napParam\": 10,\n      \"coolDownTime\": 1788535463649,\n      \"scope\": 1,\n      \"extra\": {},\n      \"ruleId\": 1003,\n      \"enabled\": 1\n    }\n  ],\n  \"_id\": 157,\n  \"serverId\": 13,\n  \"_time\": 0\n}",
+      "view": "text"
+    }
+  ],
+  "diffSelection": {
+    "basePaneId": "3974bc9d-2c55-401d-bb52-7df965c0f4ee",
+    "targetPaneId": "5e5af5df-ae4e-4dbe-ad30-399b46408eed"
+  }
+}
