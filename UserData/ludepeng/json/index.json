@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
-  "updatedAt": "2026-09-04T11:50:59.916Z",
-  "revision": 132,
+  "schemaVersion": 2,
+  "updatedAt": "2026-09-05T03:02:01.073Z",
+  "revision": 139,
   "items": [
     {
       "id": "15cc9225-367c-41ef-84e0-de9d17fd418f",
@@ -33,5 +33,6 @@
       "createdAt": "2026-09-01T12:02:48.091Z",
       "updatedAt": "2026-09-03T05:37:04.840Z"
     }
-  ]
+  ],
+  "folders": []
 }
