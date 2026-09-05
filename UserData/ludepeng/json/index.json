@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-05T03:02:01.073Z",
-  "revision": 139,
+  "updatedAt": "2026-09-05T14:04:46.062Z",
+  "revision": 145,
   "items": [
     {
       "id": "15cc9225-367c-41ef-84e0-de9d17fd418f",
@@ -26,12 +26,6 @@
       "title": "违法排行",
       "createdAt": "2026-09-01T10:34:00.167Z",
       "updatedAt": "2026-09-01T10:34:10.145Z"
-    },
-    {
-      "id": "7916c5d5-5021-4dbb-a0a8-447d8526c820",
-      "title": "违法排行",
-      "createdAt": "2026-09-01T12:02:48.091Z",
-      "updatedAt": "2026-09-03T05:37:04.840Z"
     }
   ],
   "folders": []
