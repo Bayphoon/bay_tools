@@ -20,7 +20,7 @@ export default function App() {
   useEffect(() => { void bootstrap() }, [bootstrap])
   useTheme(settings)
   if (!ready) return <div className="startup"><img className="brand-icon large" src="/baytools-icon.png" alt="" /><Spinner label="正在启动 BayTools" /></div>
-  if (error || !settings) return <div className="startup error"><h1>BayTools 无法启动</h1><p>{error ?? '设置加载失败'}</p><button onClick={() => location.reload()}>重试</button></div>
+  if (error || !settings) return <div className="startup error"><h1>BayTools 无法启动</h1><p>{error ?? '设置加载失败'}</p><p>若重试无效，请重新运行 BayTools 快捷方式；启动器会检查并重启异常或旧版本服务。</p><button onClick={() => location.reload()}>重试</button></div>
   return <Suspense fallback={<Spinner label="正在加载工具" />}><Routes>
     <Route element={<AppLayout />}>
       <Route index element={<HomePage />} />

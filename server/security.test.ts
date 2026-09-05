@@ -22,6 +22,8 @@ describe('local service security boundary', () => {
     const tokenDenied = await service.inject({ method: 'PUT', url: '/api/settings', headers: { host: '127.0.0.1:4319' }, payload: {} })
     expect(tokenDenied.statusCode).toBe(403)
     expect(tokenDenied.json().code).toBe('TOKEN_REQUIRED')
+    const restartDenied = await service.inject({ method: 'POST', url: '/api/system/restart', headers: { host: '127.0.0.1:4319' }, payload: {} })
+    expect(restartDenied.statusCode).toBe(403)
   })
 
   it('protects personal data mutations', async () => {
