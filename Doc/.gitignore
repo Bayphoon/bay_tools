@@ -1,7 +1,3 @@
-logs/
-trash/
-markdown/sources.json
-server-status/state.json
-
+*
 !.gitignore
 
