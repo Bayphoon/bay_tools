@@ -56,7 +56,7 @@ Function ServerIsCompatible(url)
   request.SetTimeouts 250, 250, 250, 250
   request.Open "GET", url & "/api/session", False
   request.Send
-  ServerIsCompatible = (Err.Number = 0 And request.Status = 200 And InStr(1, request.ResponseText, """apiVersion"":11", vbTextCompare) > 0)
+  ServerIsCompatible = (Err.Number = 0 And request.Status = 200 And InStr(1, request.ResponseText, """apiVersion"":13", vbTextCompare) > 0)
   Err.Clear
   On Error GoTo 0
 End Function

@@ -1,7 +1,8 @@
 import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { randomBytes } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
@@ -22,7 +23,7 @@ const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 11
+const apiVersion = 13
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -42,7 +43,18 @@ function allowedOrigin(value?: string): boolean {
 
 async function revealInExplorer(path: string, selectFile: boolean): Promise<void> {
   if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '文件位置功能当前仅支持 Windows')
-  await openBrowser(selectFile ? dirname(path) : path, { wait: false })
+  if (!selectFile) {
+    await openBrowser(path, { wait: false })
+    return
+  }
+  await new Promise<void>((resolve, reject) => {
+    const explorer = spawn('explorer.exe', ['/select,', path], { detached: true, stdio: 'ignore' })
+    explorer.once('error', reject)
+    explorer.once('spawn', () => {
+      explorer.unref()
+      resolve()
+    })
+  })
 }
 
 app.addHook('onRequest', async (request) => {
@@ -68,7 +80,8 @@ app.get('/api/json-scratchpad', async () => store.getJsonScratchpad())
 app.put<{ Body: JsonScratchpad }>('/api/json-scratchpad', async (request) => store.updateJsonScratchpad(request.body))
 
 app.get('/api/json-workspaces', async () => store.listJsonWorkspaces())
-app.post<{ Body: { title?: string } }>('/api/json-workspaces', async (request) => store.createJsonWorkspace(request.body?.title))
+app.get('/api/json-folders', async () => store.listJsonFolders())
+app.post<{ Body: { title?: string; folderId?: string } }>('/api/json-workspaces', async (request) => store.createJsonWorkspace(request.body?.title, request.body?.folderId))
 app.get<{ Params: { id: string } }>('/api/json-workspaces/:id', async (request) => store.getJsonWorkspace(request.params.id))
 app.put<{ Params: { id: string }; Body: JsonWorkspace }>('/api/json-workspaces/:id', async (request) => {
   if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', '工作区 ID 不匹配')
@@ -76,6 +89,7 @@ app.put<{ Params: { id: string }; Body: JsonWorkspace }>('/api/json-workspaces/:
 })
 app.post<{ Params: { id: string }; Body: { title: string } }>('/api/json-workspaces/:id/rename', async (request) => store.renameJsonWorkspace(request.params.id, request.body.title))
 app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/duplicate', async (request) => store.duplicateJsonWorkspace(request.params.id))
+app.patch<{ Params: { id: string }; Body: { folderId?: string | null } }>('/api/json-workspaces/:id/folder', async (request) => store.moveJsonWorkspace(request.params.id, request.body?.folderId ?? undefined))
 app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/trash', async (request, reply) => {
   await store.trashJsonWorkspace(request.params.id)
   return reply.status(204).send()
@@ -85,6 +99,12 @@ app.post<{ Params: { id: string } }>('/api/json-workspaces/:id/reveal', async (r
   return reply.status(204).send()
 })
 app.get<{ Params: { id: string } }>('/api/json-workspaces/:id/location', async (request) => ({ path: await store.getJsonWorkspaceLocation(request.params.id) }))
+app.post<{ Body: { name?: string } }>('/api/json-folders', async (request) => store.createJsonFolder(request.body?.name))
+app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/json-folders/:id', async (request) => store.renameJsonFolder(request.params.id, request.body.name))
+app.delete<{ Params: { id: string } }>('/api/json-folders/:id', async (request, reply) => {
+  await store.deleteJsonFolder(request.params.id)
+  return reply.status(204).send()
+})
 
 app.get('/api/colors', async () => store.getColors())
 app.put<{ Body: ColorState }>('/api/colors', async (request) => store.updateColors(request.body))
@@ -235,6 +255,7 @@ app.put<{ Params: { id: string }; Body: ManagedMarkdownDocument }>('/api/markdow
   return store.updateManagedMarkdownDocument(request.body)
 })
 app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/duplicate', async (request) => store.duplicateManagedMarkdownDocument(request.params.id))
+app.patch<{ Params: { id: string }; Body: { folderId?: string | null } }>('/api/markdown/managed/documents/:id/folder', async (request) => store.moveManagedMarkdownDocument(request.params.id, request.body?.folderId ?? undefined))
 app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/trash', async (request, reply) => {
   await store.trashManagedMarkdownDocument(request.params.id)
   return reply.status(204).send()

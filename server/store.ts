@@ -24,6 +24,7 @@ import type {
   FileWorkbenchPreviewKind,
   FileWorkbenchTextDocument,
   JsonPane,
+  JsonFolder,
   JsonScratchpad,
   JsonViewMode,
   JsonWorkspace,
@@ -45,6 +46,14 @@ import { AppError, ConflictError } from './errors.js'
 import { atomicWrite, exists, readJson, recoverAtomicArtifacts, writeJson } from './filesystem.js'
 
 interface JsonIndex {
+  schemaVersion: 2
+  updatedAt: string
+  revision: number
+  folders: JsonFolder[]
+  items: JsonWorkspaceSummary[]
+}
+
+interface LegacyJsonIndex {
   schemaVersion: 1
   updatedAt: string
   revision: number
@@ -274,7 +283,7 @@ export class BayToolsStore {
     ])
     await recoverAtomicArtifacts(this.docRoot)
     await this.ensureJson(this.settingsPath, defaultSettings())
-    await this.ensureJson(this.jsonIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies JsonIndex)
+    await this.ensureJson(this.jsonIndexPath, { schemaVersion: 2, updatedAt: now(), revision: 1, folders: [], items: [] } satisfies JsonIndex)
     await this.ensureJson(this.jsonScratchpadPath, defaultJsonScratchpad())
     await this.ensureJson(this.recentColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, recent: [] })
     await this.ensureJson(this.savedColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, saved: [] })
@@ -320,11 +329,58 @@ export class BayToolsStore {
     return value
   }
 
-  async listJsonWorkspaces(): Promise<JsonWorkspaceSummary[]> {
-    return (await readJson<JsonIndex>(this.jsonIndexPath)).items
+  private async getJsonIndex(): Promise<JsonIndex> {
+    const current = await readJson<JsonIndex | LegacyJsonIndex>(this.jsonIndexPath)
+    if (current.schemaVersion === 2 && Array.isArray(current.folders)) return current
+    const migrated: JsonIndex = { ...current, schemaVersion: 2, folders: [] }
+    await writeJson(this.jsonIndexPath, migrated)
+    return migrated
   }
 
-  async createJsonWorkspace(title = '未命名 JSON'): Promise<JsonWorkspace> {
+  async listJsonWorkspaces(): Promise<JsonWorkspaceSummary[]> {
+    return (await this.getJsonIndex()).items
+  }
+
+  async listJsonFolders(): Promise<JsonFolder[]> {
+    return (await this.getJsonIndex()).folders
+  }
+
+  async createJsonFolder(name = '未命名分组'): Promise<JsonFolder> {
+    const index = await this.getJsonIndex()
+    const createdAt = now()
+    const folder: JsonFolder = { id: randomUUID(), name: name.trim() || '未命名分组', createdAt, updatedAt: createdAt }
+    index.folders.push(folder)
+    index.revision += 1
+    index.updatedAt = now()
+    await writeJson(this.jsonIndexPath, index)
+    return folder
+  }
+
+  async renameJsonFolder(id: string, name: string): Promise<JsonFolder> {
+    const index = await this.getJsonIndex()
+    const position = index.folders.findIndex((folder) => folder.id === id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'JSON 分组不存在')
+    const folder = { ...index.folders[position]!, name: name.trim() || index.folders[position]!.name, updatedAt: now() }
+    index.folders[position] = folder
+    index.revision += 1
+    index.updatedAt = now()
+    await writeJson(this.jsonIndexPath, index)
+    return folder
+  }
+
+  async deleteJsonFolder(id: string): Promise<void> {
+    const index = await this.getJsonIndex()
+    if (index.items.some((workspace) => workspace.folderId === id)) throw new AppError(409, 'FOLDER_NOT_EMPTY', '分组中还有 JSON 文件')
+    if (!index.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'JSON 分组不存在')
+    index.folders = index.folders.filter((folder) => folder.id !== id)
+    index.revision += 1
+    index.updatedAt = now()
+    await writeJson(this.jsonIndexPath, index)
+  }
+
+  async createJsonWorkspace(title = '未命名 JSON', folderId?: string): Promise<JsonWorkspace> {
+    const index = await this.getJsonIndex()
+    if (folderId && !index.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'JSON 分组不存在')
     const createdAt = now()
     const left = createJsonPane('JSON 1')
     const right = createJsonPane('JSON 2')
@@ -339,8 +395,7 @@ export class BayToolsStore {
       diffSelection: { basePaneId: left.id, targetPaneId: right.id },
     }
     await writeJson(this.workspacePath(workspace.id), workspace)
-    const index = await readJson<JsonIndex>(this.jsonIndexPath)
-    index.items.push(this.summary(workspace))
+    index.items.push(this.summary(workspace, folderId))
     index.revision += 1
     index.updatedAt = now()
     await writeJson(this.jsonIndexPath, index)
@@ -352,9 +407,9 @@ export class BayToolsStore {
     return join(this.workspaceRoot, `${id}.json`)
   }
 
-  private summary(workspace: JsonWorkspace): JsonWorkspaceSummary {
+  private summary(workspace: JsonWorkspace, folderId?: string): JsonWorkspaceSummary {
     const { id, title, createdAt, updatedAt } = workspace
-    return { id, title, createdAt, updatedAt }
+    return { id, title, ...(folderId ? { folderId } : {}), createdAt, updatedAt }
   }
 
   async getJsonWorkspace(id: string): Promise<JsonWorkspace> {
@@ -381,9 +436,9 @@ export class BayToolsStore {
   }
 
   private async updateJsonSummary(workspace: JsonWorkspace): Promise<void> {
-    const index = await readJson<JsonIndex>(this.jsonIndexPath)
+    const index = await this.getJsonIndex()
     const position = index.items.findIndex((item) => item.id === workspace.id)
-    if (position >= 0) index.items[position] = this.summary(workspace)
+    if (position >= 0) index.items[position] = this.summary(workspace, index.items[position]!.folderId)
     else index.items.push(this.summary(workspace))
     index.revision += 1
     index.updatedAt = now()
@@ -398,12 +453,30 @@ export class BayToolsStore {
 
   async duplicateJsonWorkspace(id: string): Promise<JsonWorkspace> {
     const source = await this.getJsonWorkspace(id)
-    const duplicate = await this.createJsonWorkspace(`${source.title} 副本`)
+    const folderId = (await this.getJsonIndex()).items.find((item) => item.id === id)?.folderId
+    const duplicate = await this.createJsonWorkspace(`${source.title} 副本`, folderId)
     return this.updateJsonWorkspace(copyJsonWorkspaceContent(source, duplicate))
+  }
+
+  async moveJsonWorkspace(id: string, folderId?: string): Promise<JsonWorkspaceSummary> {
+    const index = await this.getJsonIndex()
+    const position = index.items.findIndex((workspace) => workspace.id === id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'JSON 工作区不存在')
+    if (folderId && !index.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'JSON 分组不存在')
+    const current = index.items[position]!
+    const moved = { ...current, ...(folderId ? { folderId } : {}), updatedAt: now() }
+    if (!folderId) delete moved.folderId
+    index.items[position] = moved
+    index.revision += 1
+    index.updatedAt = now()
+    await writeJson(this.jsonIndexPath, index)
+    return moved
   }
 
   async trashJsonWorkspace(id: string): Promise<void> {
     const workspace = await this.getJsonWorkspace(id)
+    const index = await this.getJsonIndex()
+    const summary = index.items.find((entry) => entry.id === id)
     const source = this.workspacePath(id)
     const itemId = randomUUID()
     const itemRoot = join(this.trashItemsRoot, itemId)
@@ -416,13 +489,13 @@ export class BayToolsStore {
       kind: 'json-workspace',
       displayName: workspace.title,
       originalLocation: source,
+      ...(summary ? { jsonWorkspace: summary } : {}),
       deletedAt: now(),
       size: buffer.byteLength,
       sha256: hashBuffer(buffer),
     }
     await writeJson(join(itemRoot, 'metadata.json'), item)
     await this.addTrashItem(item)
-    const index = await readJson<JsonIndex>(this.jsonIndexPath)
     index.items = index.items.filter((entry) => entry.id !== id)
     index.revision += 1
     index.updatedAt = now()
@@ -511,10 +584,10 @@ export class BayToolsStore {
     return join(this.managedMarkdownFilesRoot, `${id}.md`)
   }
 
-  async createManagedMarkdownFolder(name = '未命名文件夹'): Promise<ManagedMarkdownFolder> {
+  async createManagedMarkdownFolder(name = '未命名分组'): Promise<ManagedMarkdownFolder> {
     const library = await this.getManagedMarkdownLibrary()
     const createdAt = now()
-    const folder: ManagedMarkdownFolder = { id: randomUUID(), name: name.trim() || '未命名文件夹', createdAt, updatedAt: createdAt }
+    const folder: ManagedMarkdownFolder = { id: randomUUID(), name: name.trim() || '未命名分组', createdAt, updatedAt: createdAt }
     library.folders.push(folder)
     library.revision += 1
     library.updatedAt = now()
@@ -525,7 +598,7 @@ export class BayToolsStore {
   async renameManagedMarkdownFolder(id: string, name: string): Promise<ManagedMarkdownFolder> {
     const library = await this.getManagedMarkdownLibrary()
     const position = library.folders.findIndex((folder) => folder.id === id)
-    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'Markdown 分组不存在')
     const folder = { ...library.folders[position]!, name: name.trim() || library.folders[position]!.name, updatedAt: now() }
     library.folders[position] = folder
     library.revision += 1
@@ -537,9 +610,9 @@ export class BayToolsStore {
   async deleteManagedMarkdownFolder(id: string): Promise<void> {
     const library = await this.getManagedMarkdownLibrary()
     if (library.documents.some((document) => document.folderId === id)) {
-      throw new AppError(409, 'FOLDER_NOT_EMPTY', '文件夹中还有 Markdown 文档')
+      throw new AppError(409, 'FOLDER_NOT_EMPTY', '分组中还有 Markdown 文档')
     }
-    if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 分组不存在')
     library.folders = library.folders.filter((folder) => folder.id !== id)
     library.revision += 1
     library.updatedAt = now()
@@ -548,7 +621,7 @@ export class BayToolsStore {
 
   async createManagedMarkdownDocument(title = '未命名 Markdown', folderId?: string): Promise<ManagedMarkdownDocument> {
     const library = await this.getManagedMarkdownLibrary()
-    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
     const createdAt = now()
     const summary: ManagedMarkdownDocumentSummary = {
       id: randomUUID(),
@@ -581,11 +654,10 @@ export class BayToolsStore {
     if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
     const current = library.documents[position]!
     if (current.revision !== next.revision) throw new ConflictError('Markdown 文档已在其他窗口中修改', await this.getManagedMarkdownDocument(next.id))
-    if (next.folderId && !library.folders.some((folder) => folder.id === next.folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
     const summary: ManagedMarkdownDocumentSummary = {
       id: current.id,
       title: next.title.trim() || current.title,
-      ...(next.folderId ? { folderId: next.folderId } : {}),
+      ...(current.folderId ? { folderId: current.folderId } : {}),
       createdAt: current.createdAt,
       updatedAt: now(),
       revision: current.revision + 1,
@@ -602,6 +674,21 @@ export class BayToolsStore {
     const source = await this.getManagedMarkdownDocument(id)
     const duplicate = await this.createManagedMarkdownDocument(`${source.title} 副本`, source.folderId)
     return this.updateManagedMarkdownDocument({ ...duplicate, content: source.content })
+  }
+
+  async moveManagedMarkdownDocument(id: string, folderId?: string): Promise<ManagedMarkdownDocumentSummary> {
+    const library = await this.getManagedMarkdownLibrary()
+    const position = library.documents.findIndex((document) => document.id === id)
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
+    const current = library.documents[position]!
+    const moved = { ...current, ...(folderId ? { folderId } : {}), updatedAt: now() }
+    if (!folderId) delete moved.folderId
+    library.documents[position] = moved
+    library.revision += 1
+    library.updatedAt = now()
+    await writeJson(this.managedMarkdownIndexPath, library)
+    return moved
   }
 
   async getManagedMarkdownDocumentLocation(id: string): Promise<string> {
@@ -967,16 +1054,21 @@ export class BayToolsStore {
     const itemRoot = join(this.trashItemsRoot, id)
     if (item.kind === 'json-workspace') {
       const { workspace } = migrateJsonWorkspace(await readJson<JsonWorkspace | LegacyJsonWorkspace>(join(itemRoot, 'payload.json')))
+      const jsonIndex = await this.getJsonIndex()
+      const folderId = item.jsonWorkspace?.folderId && jsonIndex.folders.some((folder) => folder.id === item.jsonWorkspace!.folderId)
+        ? item.jsonWorkspace.folderId
+        : undefined
       let restored = workspace
       let target = this.workspacePath(workspace.id)
       if (await exists(target)) {
         if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID 工作区已经存在')
-        const created = await this.createJsonWorkspace(`${workspace.title}（已恢复）`)
+        const created = await this.createJsonWorkspace(`${workspace.title}（已恢复）`, folderId)
         restored = await this.updateJsonWorkspace(copyJsonWorkspaceContent(workspace, created))
         target = this.workspacePath(restored.id)
       } else {
         await writeJson(target, workspace)
         await this.updateJsonSummary(restored)
+        if (folderId) await this.moveJsonWorkspace(restored.id, folderId)
       }
       await this.removeTrashItem(index, item)
       return { restoredLocation: target, workspaceId: restored.id }

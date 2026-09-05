@@ -1,6 +1,6 @@
 # BayTools
 
-本地运行的开发者工具工作台，提供 Timestamp、颜色转换、JSON 工作区、Markdown 阅读/编辑与多语言查询能力。所有持久化数据默认保存在工程内的 `Doc` 目录。
+本地运行的开发者工具工作台，提供 Timestamp、颜色转换、可分组的 JSON 工作区、Markdown 阅读/编辑与多语言查询能力。JSON 工作区和 BayTools 托管 Markdown 文档均可在侧边栏分组之间移动。所有持久化数据默认保存在工程内的 `Doc` 目录。
 
 ## 运行
 
@@ -52,7 +52,7 @@ git switch -c user/alice
 npm run start
 ```
 
-使用 BayTools 后，可以在“设置 → 个人数据”中点击“同步、提交并推送”。它只提交 `UserData/<当前用户名>`，不会提交代码或强推；远端领先、存在其他已暂存文件、认证失败或快照含超过 90 MiB 的文件时会停止。等价命令为：
+使用 BayTools 后，可以在侧边栏“数据同步”中点击“同步、提交并推送”。它只提交 `UserData/<当前用户名>`，不会提交代码或强推；远端领先、存在其他已暂存文件、认证失败或快照含超过 90 MiB 的文件时会停止。等价命令为：
 
 ```powershell
 npm run data:publish -- --confirm
