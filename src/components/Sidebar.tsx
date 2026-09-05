@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, Files, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, Files, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -268,6 +268,9 @@ export function Sidebar() {
       </div>
       <NavLink to="/server-status" className="nav-row"><Server size={16} /><span>服务器状态</span></NavLink>
     </nav>
-    <div className="sidebar-bottom"><NavLink to="/settings" className="nav-row"><Settings size={16} /><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink></div>
+    <div className="sidebar-bottom">
+      <NavLink to="/data-sync" className="nav-row"><CloudUpload size={16} /><span>数据同步</span></NavLink>
+      <NavLink to="/settings" className="nav-row"><Settings size={16} /><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink>
+    </div>
   </aside>
 }
