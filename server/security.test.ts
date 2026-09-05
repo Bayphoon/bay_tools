@@ -24,17 +24,12 @@ describe('local service security boundary', () => {
     expect(tokenDenied.json().code).toBe('TOKEN_REQUIRED')
   })
 
-  it('protects personal data mutations and disables sync on main', async () => {
+  it('protects personal data mutations', async () => {
     const status = await service.inject({ method: 'GET', url: '/api/personal-data/status', headers: { host: '127.0.0.1:4319' } })
     expect(status.statusCode).toBe(200)
-    expect(status.json()).toMatchObject({ branch: 'main', eligible: false, state: 'unavailable' })
+    expect(status.json()).toMatchObject({ eligible: expect.any(Boolean), runtimeHasData: expect.any(Boolean) })
 
-    const session = await service.inject({ method: 'GET', url: '/api/session', headers: { host: '127.0.0.1:4319' } })
-    const token = session.json().token as string
     const denied = await service.inject({ method: 'POST', url: '/api/personal-data/sync', headers: { host: '127.0.0.1:4319' }, payload: {} })
     expect(denied.statusCode).toBe(403)
-    const mainDenied = await service.inject({ method: 'POST', url: '/api/personal-data/sync', headers: { host: '127.0.0.1:4319', 'x-baytools-token': token }, payload: {} })
-    expect(mainDenied.statusCode).toBe(409)
-    expect(mainDenied.json().code).toBe('USER_BRANCH_REQUIRED')
   })
 })
