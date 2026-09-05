@@ -1,0 +1,37 @@
+.translation-controls { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.translation-controls .field-label { min-width: 145px; }
+.translation-controls > .tool-button { height: 36px; }
+.translation-model { margin-left: auto; }
+.translation-editors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.translation-editor { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.translation-editor-heading, .translation-editor-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 53px; padding: 10px 14px; }
+.translation-editor-heading { border-bottom: 1px solid var(--border); }
+.translation-editor-heading h2 { margin: 0; font-size: 14px; }
+.translation-editor textarea { display: block; flex: 1; width: 100%; min-height: 290px; padding: 16px; resize: vertical; border: 0; background: var(--bg); color: var(--text); font-family: inherit; font-size: 14px; line-height: 1.8; }
+.translation-editor textarea:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.translation-editor-footer { border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.translation-privacy { margin: 14px 0 24px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.translation-setup { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 18px; font-size: 13px; background: var(--surface); }
+.translation-setup a { color: var(--accent); margin: 0 4px; }
+.translation-history h2 { display: flex; align-items: center; gap: 8px; }
+.translation-history h2 span { font-size: 12px; color: var(--muted); }
+.translation-history .section-heading p, .deepseek-settings p { font-size: 12px; color: var(--muted); line-height: 1.8; }
+.translation-history > .search-field { border: 1px solid var(--border); border-radius: 6px; margin: 14px 0; height: 36px; }
+.translation-history-list { max-height: 480px; overflow-y: auto; }
+.translation-history-item { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.translation-history-item:last-child { border-bottom: 0; }
+.translation-history-open { display: flex; flex-direction: column; gap: 7px; flex: 1; min-width: 0; padding: 8px; text-align: left; background: transparent; border: 0; border-radius: 6px; color: var(--text); cursor: pointer; }
+.translation-history-open:hover:not(:disabled) { background: var(--surface-hover); }
+.translation-history-open:disabled { cursor: wait; opacity: .6; }
+.translation-history-meta { font-size: 11px; color: var(--muted); }
+.translation-history-open strong, .translation-history-preview { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.translation-history-preview { color: var(--muted); }
+.deepseek-settings { display: grid; gap: 16px; }
+.deepseek-settings p { margin: 0; }
+.deepseek-settings .toolbar { flex-wrap: wrap; }
+@media (max-width: 980px) {
+  .translation-editors { grid-template-columns: 1fr; }
+  .translation-editor textarea { min-height: 200px; }
+  .translation-model { margin-left: 0; }
+  .translation-history .section-heading { flex-wrap: wrap; }
+}

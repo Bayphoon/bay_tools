@@ -32,6 +32,7 @@ import type {
   ShortcutResult,
   TrashItem,
 } from '../../shared/types'
+import type { TranslationConfig, TranslationEntry, TranslationEvent, TranslationInput } from '../../shared/translation'
 
 export class ApiError extends Error {
   constructor(public readonly status: number, public readonly code?: string, public readonly details?: unknown, message = '请求失败') {
@@ -81,6 +82,46 @@ async function uploadFile(file: File): Promise<FileWorkbenchItem> {
 }
 
 const query = (values: Record<string, string>) => new URLSearchParams(values).toString()
+
+export const translationApi = {
+  getConfig: () => request<TranslationConfig>('/api/translation/config', { cache: 'no-store' }),
+  saveKey: (apiKey: string) => request<TranslationConfig>('/api/translation/config', { method: 'PUT', body: JSON.stringify({ apiKey }) }),
+  deleteKey: () => request<TranslationConfig>('/api/translation/config', { method: 'DELETE' }),
+  testConnection: () => request<{ message: string }>('/api/translation/test', { method: 'POST', body: '{}' }),
+  listHistory: () => request<TranslationEntry[]>('/api/translation/history', { cache: 'no-store' }),
+  deleteHistory: (id?: string) => request<void>(`/api/translation/history${id ? `/${encodeURIComponent(id)}` : ''}`, { method: 'DELETE' }),
+  async translate(input: TranslationInput, signal: AbortSignal, onEvent: (event: TranslationEvent) => void): Promise<void> {
+    const response = await fetch('/api/translation/translate', {
+      method: 'POST', signal, headers: { 'content-type': 'application/json', 'x-baytools-token': await token() }, body: JSON.stringify(input),
+    })
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({ error: response.statusText })) as ApiFailure
+      throw new ApiError(response.status, failure.code, failure.details, failure.error)
+    }
+    if (!response.body) throw new Error('翻译连接未建立，请重试')
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let pending = ''
+    let complete = false
+    const consume = (line: string) => {
+      if (!line.trim()) return
+      const event = JSON.parse(line) as TranslationEvent
+      if (event.type === 'error') throw new ApiError(502, event.code, undefined, event.error)
+      if (event.type === 'complete') complete = true
+      onEvent(event)
+    }
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        pending += done ? decoder.decode() : decoder.decode(value, { stream: true })
+        let end: number
+        while ((end = pending.indexOf('\n')) >= 0) { consume(pending.slice(0, end)); pending = pending.slice(end + 1) }
+        if (done) { consume(pending); break }
+      }
+      if (!complete) throw new Error('翻译连接中断，本次译文可能不完整，请重试')
+    } finally { await reader.cancel().catch(() => undefined); reader.releaseLock() }
+  },
+}
 
 export const localBridge: LocalBridge = {
   getSettings: () => request<AppSettings>('/api/settings'),

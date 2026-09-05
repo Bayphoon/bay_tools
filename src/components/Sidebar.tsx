@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, Files, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, Files, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -289,6 +289,7 @@ export function Sidebar() {
       <NavLink to="/files" className="nav-row"><Files size={16} /><span>文件工作台</span></NavLink>
       <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
       <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
+      <NavLink to="/translation" className="nav-row"><MessageSquareText size={16} /><span>翻译</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
           <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><Languages size={16} /><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>

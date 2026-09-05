@@ -33,6 +33,14 @@ npm run build
 
 ## 本地数据
 
+主页提供快速翻译卡片，侧边栏“翻译”提供完整双栏编辑、语言选择、流式输出、取消和历史记录；颜色转换工具仍可从侧边栏打开。
+
+首次使用，在“设置 → DeepSeek API”中保存密钥并测试连接。Windows 使用 DPAPI 加密保存，仅当前 Windows 用户可解密；也支持服务进程的 `DEEPSEEK_API_KEY` 环境变量，本机保存的密钥优先。每台设备需单独配置密钥。
+
+翻译使用 [DeepSeek 官方 API](https://api-docs.deepseek.com/)，默认 `deepseek-v4-flash`，可选 `deepseek-v4-pro`。点击翻译才会将本次原文发送给 DeepSeek，按其 API 用量计费；连接测试只读取模型列表。单次最多 12,000 个字符，支持 Ctrl+Enter 发起翻译；未完整生成或已取消的译文不会保存到历史。
+
+翻译历史只保存在 `Doc/translation/history.json`，最多保留最近 100 条及约 8 MiB 内容，可搜索、载入、复制、单条删除或清空。密钥保存在 `Doc/secrets/deepseek.json`。这两个目录均不进入 Git、用户数据快照或发布流程；恢复分支快照不会覆盖它们。历史在同一工作目录切换分支或重启后保留，不跨设备同步。原文和译文以本机文件保存；清空历史不可恢复。
+
 - `Doc/settings.json`：主题、侧边栏与工作时间设置。
 - `Doc/json`：JSON 工作区。
 - `Doc/color`：最近颜色与收藏颜色。

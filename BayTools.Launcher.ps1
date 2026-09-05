@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Address = 'http://127.0.0.1:4319'
-$ExpectedApiVersion = 14
+$ExpectedApiVersion = 15
 $LogPath = Join-Path $ProjectRoot 'Doc\logs\baytools.log'
 $LauncherLogPath = Join-Path $ProjectRoot 'Doc\logs\baytools-launcher.log'
 $StatusPath = Join-Path $ProjectRoot 'Doc\logs\baytools-startup.status'

@@ -17,13 +17,15 @@ import { selectWindowsFolder } from './folderDialog.js'
 import { createWindowsShortcut } from './shortcut.js'
 import { parseSingleByteRange } from './fileRange.js'
 import { PersonalDataManager } from './personalData.js'
+import { TranslationStore } from './translationStore.js'
+import { registerTranslationRoutes } from './translationRoutes.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 14
+const apiVersion = 15
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -74,6 +76,7 @@ app.setErrorHandler((error, _request, reply) => {
 })
 
 app.get('/api/session', async () => ({ token: sessionToken, apiVersion, sourceVersion, serviceId }))
+registerTranslationRoutes(app, new TranslationStore(projectRoot))
 
 app.get('/api/settings', async () => store.getSettings())
 app.put<{ Body: AppSettings }>('/api/settings', async (request) => store.updateSettings(request.body))
