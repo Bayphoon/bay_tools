@@ -87,6 +87,10 @@ export class LanguageStore {
     this.cacheRoot = join(languageRoot, 'cache')
   }
 
+  clearCache(): void {
+    this.parsedCache.clear()
+  }
+
   async init(): Promise<void> {
     await mkdir(this.cacheRoot, { recursive: true })
     if (!(await exists(this.indexPath))) {

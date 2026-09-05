@@ -10,6 +10,9 @@
     "dev": "concurrently -k -n api,web -c cyan,magenta \"tsx watch server/index.ts\" \"vite\"",
     "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
     "start": "npm run build && node dist-server/server/index.js",
+    "data:status": "tsx server/personalDataCli.ts status",
+    "data:sync": "tsx server/personalDataCli.ts sync",
+    "data:restore": "tsx server/personalDataCli.ts restore",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit"
