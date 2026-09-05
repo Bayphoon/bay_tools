@@ -1,7 +1,8 @@
 import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { randomBytes } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
@@ -22,7 +23,7 @@ const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 12
+const apiVersion = 13
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -42,7 +43,18 @@ function allowedOrigin(value?: string): boolean {
 
 async function revealInExplorer(path: string, selectFile: boolean): Promise<void> {
   if (process.platform !== 'win32') throw new AppError(501, 'WINDOWS_ONLY', '文件位置功能当前仅支持 Windows')
-  await openBrowser(selectFile ? dirname(path) : path, { wait: false })
+  if (!selectFile) {
+    await openBrowser(path, { wait: false })
+    return
+  }
+  await new Promise<void>((resolve, reject) => {
+    const explorer = spawn('explorer.exe', ['/select,', path], { detached: true, stdio: 'ignore' })
+    explorer.once('error', reject)
+    explorer.once('spawn', () => {
+      explorer.unref()
+      resolve()
+    })
+  })
 }
 
 app.addHook('onRequest', async (request) => {

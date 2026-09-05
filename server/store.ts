@@ -584,10 +584,10 @@ export class BayToolsStore {
     return join(this.managedMarkdownFilesRoot, `${id}.md`)
   }
 
-  async createManagedMarkdownFolder(name = '未命名文件夹'): Promise<ManagedMarkdownFolder> {
+  async createManagedMarkdownFolder(name = '未命名分组'): Promise<ManagedMarkdownFolder> {
     const library = await this.getManagedMarkdownLibrary()
     const createdAt = now()
-    const folder: ManagedMarkdownFolder = { id: randomUUID(), name: name.trim() || '未命名文件夹', createdAt, updatedAt: createdAt }
+    const folder: ManagedMarkdownFolder = { id: randomUUID(), name: name.trim() || '未命名分组', createdAt, updatedAt: createdAt }
     library.folders.push(folder)
     library.revision += 1
     library.updatedAt = now()
@@ -598,7 +598,7 @@ export class BayToolsStore {
   async renameManagedMarkdownFolder(id: string, name: string): Promise<ManagedMarkdownFolder> {
     const library = await this.getManagedMarkdownLibrary()
     const position = library.folders.findIndex((folder) => folder.id === id)
-    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'Markdown 分组不存在')
     const folder = { ...library.folders[position]!, name: name.trim() || library.folders[position]!.name, updatedAt: now() }
     library.folders[position] = folder
     library.revision += 1
@@ -610,9 +610,9 @@ export class BayToolsStore {
   async deleteManagedMarkdownFolder(id: string): Promise<void> {
     const library = await this.getManagedMarkdownLibrary()
     if (library.documents.some((document) => document.folderId === id)) {
-      throw new AppError(409, 'FOLDER_NOT_EMPTY', '文件夹中还有 Markdown 文档')
+      throw new AppError(409, 'FOLDER_NOT_EMPTY', '分组中还有 Markdown 文档')
     }
-    if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 文件夹不存在')
+    if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 分组不存在')
     library.folders = library.folders.filter((folder) => folder.id !== id)
     library.revision += 1
     library.updatedAt = now()
@@ -621,7 +621,7 @@ export class BayToolsStore {
 
   async createManagedMarkdownDocument(title = '未命名 Markdown', folderId?: string): Promise<ManagedMarkdownDocument> {
     const library = await this.getManagedMarkdownLibrary()
-    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
     const createdAt = now()
     const summary: ManagedMarkdownDocumentSummary = {
       id: randomUUID(),
@@ -680,7 +680,7 @@ export class BayToolsStore {
     const library = await this.getManagedMarkdownLibrary()
     const position = library.documents.findIndex((document) => document.id === id)
     if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
-    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 文件夹不存在')
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
     const current = library.documents[position]!
     const moved = { ...current, ...(folderId ? { folderId } : {}), updatedAt: now() }
     if (!folderId) delete moved.folderId

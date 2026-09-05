@@ -72,6 +72,7 @@ a { color: inherit; text-decoration: none; }
 .source-toggle span { flex: 1; }
 .managed-markdown-tree { margin-top: 3px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
 .managed-markdown-tree > .nav-child-wrap > .nav-tree-row { padding-left: 34px; }
+.json-folder-tree > .nav-child-wrap > .nav-tree-row { padding-left: 34px; }
 .managed-folder { margin-left: 8px; border-left: 1px solid var(--border); }
 .managed-folder-toggle { padding-left: 8px; }
 .managed-folder .nav-tree-row { padding-left: 27px; }

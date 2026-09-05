@@ -133,12 +133,12 @@ function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdo
       const collapsed = collapsedFolders[folder.id] ?? false
       return <div key={folder.id} className="managed-folder">
         <div className="source-title"><button className="source-toggle managed-folder-toggle" aria-expanded={!collapsed} onClick={() => setCollapsedFolders((value) => ({ ...value, [folder.id]: !collapsed }))}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={14} /><span>{folder.name}</span></button><Menu>{item('新建空文档', () => { void createDocument(folder.id) })}{item('重命名', async () => {
-          const name = window.prompt('文件夹名称', folder.name)?.trim()
+          const name = window.prompt('分组名称', folder.name)?.trim()
           if (!name || name === folder.name) return
           await localBridge.renameManagedMarkdownFolder(folder.id, name)
           await onChanged()
-        })}{item('删除空文件夹', async () => {
-          if (documents.length || !window.confirm(`删除空文件夹 ${folder.name}？`)) return
+        })}{item('删除空分组', async () => {
+          if (documents.length || !window.confirm(`删除空分组 ${folder.name}？`)) return
           await localBridge.deleteManagedMarkdownFolder(folder.id)
           await onChanged()
         }, true)}</Menu></div>
@@ -234,7 +234,7 @@ export function Sidebar() {
   }
 
   const createManagedFolder = async () => {
-    const name = window.prompt('文件夹名称', '未命名文件夹')?.trim()
+    const name = window.prompt('分组名称', '未命名分组')?.trim()
     if (!name) return
     await localBridge.createManagedMarkdownFolder(name)
     await refreshManagedMarkdown()
@@ -267,7 +267,7 @@ export function Sidebar() {
       <div className="nav-group">
         <div className="nav-parent">
           <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><FileText size={16} /><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
-          <Menu triggerLabel="添加 Markdown 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空文档', () => { void createManagedDocument() })}{item('添加文件夹', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
+          <Menu triggerLabel="添加 Markdown 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空文档', () => { void createManagedDocument() })}{item('添加分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
         </div>
         {markdownOpen && <div className="nav-children">{managedMarkdown && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
           const collapsed = settings?.sidebar.collapsedGroups.includes(`markdown-source:${source.id}`) ?? false
