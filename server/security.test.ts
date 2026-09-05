@@ -36,4 +36,16 @@ describe('local service security boundary', () => {
     const publishDenied = await service.inject({ method: 'POST', url: '/api/personal-data/publish', headers: { host: '127.0.0.1:4319' }, payload: { confirm: true } })
     expect(publishDenied.statusCode).toBe(403)
   })
+
+  it('protects translation requests, credentials and history mutations', async () => {
+    for (const [method, url] of [
+      ['POST', '/api/translation/translate'], ['PUT', '/api/translation/config'],
+      ['DELETE', '/api/translation/config'], ['POST', '/api/translation/test'],
+      ['DELETE', '/api/translation/history'], ['DELETE', '/api/translation/history/test-id'],
+    ] as const) {
+      const denied = await service.inject({ method, url, headers: { host: '127.0.0.1:4319' }, payload: {} })
+      expect(denied.statusCode).toBe(403)
+      expect(denied.json().code).toBe('TOKEN_REQUIRED')
+    }
+  })
 })

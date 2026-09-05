@@ -68,6 +68,8 @@ describe('PersonalDataManager', () => {
     await write(root, 'Doc/trash/index.json', '{"items":[]}')
     await write(root, 'Doc/markdown/sources.json', '{"sources":[{"path":"C:/private"}]}')
     await write(root, 'Doc/server-status/state.json', '{"url":"private"}')
+    await write(root, 'Doc/translation/history.json', '[{"text":"local-only"}]')
+    await write(root, 'Doc/secrets/deepseek.json', '{"encryptedKey":"local-secret"}')
 
     const first = await manager.sync()
     expect(first.changed).toBe(true)
@@ -77,6 +79,8 @@ describe('PersonalDataManager', () => {
     await expect(access(join(root, 'UserData/alice/trash/index.json'))).rejects.toThrow()
     await expect(access(join(root, 'UserData/alice/markdown/sources.json'))).rejects.toThrow()
     await expect(access(join(root, 'UserData/alice/server-status/state.json'))).rejects.toThrow()
+    await expect(access(join(root, 'UserData/alice/translation'))).rejects.toThrow()
+    await expect(access(join(root, 'UserData/alice/secrets'))).rejects.toThrow()
     await expect(manager.sync()).resolves.toMatchObject({ changed: false, status: { state: 'ready' } })
   })
 
@@ -102,6 +106,8 @@ describe('PersonalDataManager', () => {
     await write(root, 'Doc/json/stale.json', 'stale')
     await write(root, 'Doc/logs/baytools.log', 'keep me')
     await write(root, 'Doc/markdown/sources.json', 'keep sources')
+    await write(root, 'Doc/translation/history.json', 'keep local history')
+    await write(root, 'Doc/secrets/deepseek.json', 'keep local key')
 
     await expect(manager.restore()).rejects.toMatchObject({ code: 'RESTORE_CONFIRMATION_REQUIRED' })
     await expect(manager.restore(true)).resolves.toMatchObject({ status: { state: 'ready' } })
@@ -110,6 +116,8 @@ describe('PersonalDataManager', () => {
     await expect(access(join(root, 'Doc/json/stale.json'))).rejects.toThrow()
     expect(await readFile(join(root, 'Doc/logs/baytools.log'), 'utf8')).toBe('keep me')
     expect(await readFile(join(root, 'Doc/markdown/sources.json'), 'utf8')).toBe('keep sources')
+    expect(await readFile(join(root, 'Doc/translation/history.json'), 'utf8')).toBe('keep local history')
+    expect(await readFile(join(root, 'Doc/secrets/deepseek.json'), 'utf8')).toBe('keep local key')
   })
 
   it('automatically restores a snapshot only when portable runtime data is empty', async () => {

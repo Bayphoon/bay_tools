@@ -1,6 +1,8 @@
 import * as Tabs from '@radix-ui/react-tabs'
 import { LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { DeepSeekSettings } from '../components/DeepSeekSettings'
 import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
@@ -10,6 +12,8 @@ import { useAppStore } from '../store/appStore'
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 
 export function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedTab = searchParams.get('tab') ?? 'appearance'
   const settings = useAppStore((state) => state.settings)!
   const saveSettings = useAppStore((state) => state.saveSettings)
   const refreshJson = useAppStore((state) => state.refreshJson)
@@ -91,8 +95,9 @@ export function SettingsPage() {
   }
   return <div className="page">
     <PageHeader title="设置" description="调整 BayTools 外观、启动方式并管理本地垃圾箱" />
-    <Tabs.Root defaultValue="appearance" className="settings-tabs">
-      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
+    <Tabs.Root value={['appearance', 'shortcut', 'deepseek', 'trash'].includes(selectedTab) ? selectedTab : 'appearance'} onValueChange={(tab) => setSearchParams({ tab }, { replace: true })} className="settings-tabs">
+      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="deepseek">DeepSeek API</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
+      <Tabs.Content value="deepseek" className="settings-content"><DeepSeekSettings /></Tabs.Content>
       <Tabs.Content value="appearance" className="settings-content">
         <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">THEME MODE</span><h2>外观模式</h2></div></div>
           <div className="theme-mode-grid">{([

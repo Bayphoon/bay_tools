@@ -7,6 +7,7 @@ import { useAppStore } from './store/appStore'
 const HomePage = lazy(() => import('./pages/HomePage').then((module) => ({ default: module.HomePage })))
 const TimestampPage = lazy(() => import('./pages/TimestampPage').then((module) => ({ default: module.TimestampPage })))
 const ColorPage = lazy(() => import('./pages/ColorPage').then((module) => ({ default: module.ColorPage })))
+const TranslationPage = lazy(() => import('./pages/TranslationPage').then((module) => ({ default: module.TranslationPage })))
 const JsonWorkspacePage = lazy(() => import('./pages/JsonWorkspacePage').then((module) => ({ default: module.JsonWorkspacePage })))
 const LanguagePage = lazy(() => import('./pages/LanguagePage').then((module) => ({ default: module.LanguagePage })))
 const ServerStatusPage = lazy(() => import('./pages/ServerStatusPage').then((module) => ({ default: module.ServerStatusPage })))
@@ -26,6 +27,7 @@ export default function App() {
       <Route index element={<HomePage />} />
       <Route path="timestamp" element={<TimestampPage />} />
       <Route path="color" element={<ColorPage />} />
+      <Route path="translation" element={<TranslationPage />} />
       <Route path="json/:id" element={<JsonWorkspacePage />} />
       <Route path="language/:id" element={<LanguagePage />} />
       <Route path="server-status" element={<ServerStatusPage />} />
