@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppSettings, JsonScratchpad, JsonWorkspaceSummary, LanguageSourceSummary, ManagedMarkdownLibrary, MarkdownSourceTree } from '../../shared/types'
+import type { AppSettings, JsonFolder, JsonScratchpad, JsonWorkspaceSummary, LanguageSourceSummary, ManagedMarkdownLibrary, MarkdownSourceTree } from '../../shared/types'
 import { ApiError, localBridge } from '../lib/api'
 
 type JsonScratchpadPatch = Partial<Pick<JsonScratchpad, 'text' | 'mode' | 'autoFormat'>>
@@ -13,6 +13,7 @@ interface AppState {
   jsonScratchpad?: JsonScratchpad
   jsonScratchpadSaveStatus: JsonScratchpadSaveStatus
   jsonScratchpadSaveError?: string
+  jsonFolders: JsonFolder[]
   jsonWorkspaces: JsonWorkspaceSummary[]
   languageSources: LanguageSourceSummary[]
   markdownTrees: MarkdownSourceTree[]
@@ -75,6 +76,7 @@ export const useAppStore = create<AppState>((set, get) => {
     ready: false,
     loading: false,
     jsonScratchpadSaveStatus: 'idle',
+    jsonFolders: [],
     jsonWorkspaces: [],
     languageSources: [],
     markdownTrees: [],
@@ -83,20 +85,24 @@ export const useAppStore = create<AppState>((set, get) => {
     bootstrap: async () => {
       set({ loading: true, error: undefined })
       try {
-        const [settings, jsonScratchpad, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown] = await Promise.all([
+        const [settings, jsonScratchpad, jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown] = await Promise.all([
           localBridge.getSettings(),
           localBridge.getJsonScratchpad(),
+          localBridge.listJsonFolders(),
           localBridge.listJsonWorkspaces(),
           localBridge.listLanguageSources(),
           localBridge.scanMarkdownSources(),
           localBridge.getManagedMarkdownLibrary(),
         ])
-        set({ ready: true, loading: false, settings, jsonScratchpad, jsonScratchpadSaveStatus: 'idle', jsonWorkspaces, languageSources, markdownTrees, managedMarkdown })
+        set({ ready: true, loading: false, settings, jsonScratchpad, jsonScratchpadSaveStatus: 'idle', jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown })
       } catch (error) {
         set({ ready: true, loading: false, error: error instanceof Error ? error.message : '初始化失败' })
       }
     },
-    refreshJson: async () => set({ jsonWorkspaces: await localBridge.listJsonWorkspaces() }),
+    refreshJson: async () => {
+      const [jsonFolders, jsonWorkspaces] = await Promise.all([localBridge.listJsonFolders(), localBridge.listJsonWorkspaces()])
+      set({ jsonFolders, jsonWorkspaces })
+    },
     refreshLanguages: async () => set({ languageSources: await localBridge.listLanguageSources() }),
     refreshMarkdown: async () => set({ markdownTrees: await localBridge.scanMarkdownSources() }),
     refreshManagedMarkdown: async () => set({ managedMarkdown: await localBridge.getManagedMarkdownLibrary() }),

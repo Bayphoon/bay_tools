@@ -47,6 +47,42 @@ describe('BayToolsStore', () => {
     expect((await store.listJsonWorkspaces())[0]?.title).toBe('Compare')
   })
 
+  it('creates JSON groups, moves workspaces, and preserves groups through updates and trash restore', async () => {
+    const first = await store.createJsonFolder('接口')
+    const second = await store.createJsonFolder('配置')
+    const workspace = await store.createJsonWorkspace('登录', first.id)
+    expect((await store.listJsonWorkspaces())[0]?.folderId).toBe(first.id)
+
+    const duplicate = await store.duplicateJsonWorkspace(workspace.id)
+    expect((await store.listJsonWorkspaces()).find((item) => item.id === duplicate.id)?.folderId).toBe(first.id)
+    await expect(store.deleteJsonFolder(first.id)).rejects.toMatchObject({ code: 'FOLDER_NOT_EMPTY' })
+
+    await store.moveJsonWorkspace(workspace.id, second.id)
+    const updated = await store.updateJsonWorkspace({ ...workspace, title: '登录接口' })
+    expect((await store.listJsonWorkspaces()).find((item) => item.id === updated.id)).toMatchObject({ title: '登录接口', folderId: second.id })
+
+    await store.trashJsonWorkspace(updated.id)
+    const trash = (await store.listTrash()).find((item) => item.kind === 'json-workspace')!
+    await store.restoreTrash(trash.id)
+    expect((await store.listJsonWorkspaces()).find((item) => item.id === updated.id)?.folderId).toBe(second.id)
+
+    await store.moveJsonWorkspace(duplicate.id)
+    await store.deleteJsonFolder(first.id)
+    expect((await store.listJsonFolders()).map((folder) => folder.name)).toEqual(['配置'])
+  })
+
+  it('migrates the legacy JSON index before using groups', async () => {
+    await store.createJsonWorkspace('Legacy index')
+    const indexPath = join(root, 'Doc', 'json', 'index.json')
+    const legacy = JSON.parse(await readFile(indexPath, 'utf8'))
+    legacy.schemaVersion = 1
+    delete legacy.folders
+    await writeFile(indexPath, JSON.stringify(legacy), 'utf8')
+
+    expect(await store.listJsonFolders()).toEqual([])
+    expect(JSON.parse(await readFile(indexPath, 'utf8'))).toMatchObject({ schemaVersion: 2, folders: [] })
+  })
+
   it('migrates legacy two-column JSON workspaces without losing content', async () => {
     const workspace = await store.createJsonWorkspace('Legacy')
     const path = join(root, 'Doc', 'json', 'workspaces', `${workspace.id}.json`)
@@ -108,21 +144,29 @@ describe('BayToolsStore', () => {
 
   it('creates folders and auto-save ready managed Markdown documents', async () => {
     const folder = await store.createManagedMarkdownFolder('接口记录')
+    const archive = await store.createManagedMarkdownFolder('归档')
     const document = await store.createManagedMarkdownDocument('登录接口', folder.id)
     expect(await store.getManagedMarkdownDocumentLocation(document.id)).toBe(join(root, 'Doc', 'markdown', 'documents', 'files', `${document.id}.md`))
     const saved = await store.updateManagedMarkdownDocument({ ...document, content: '# 登录\n\n成功。' })
     expect((await store.getManagedMarkdownDocument(saved.id)).content).toContain('成功')
     await expect(store.deleteManagedMarkdownFolder(folder.id)).rejects.toMatchObject({ code: 'FOLDER_NOT_EMPTY' })
 
+    await store.moveManagedMarkdownDocument(saved.id, archive.id)
+    const savedAfterMove = await store.updateManagedMarkdownDocument({ ...saved, content: `${saved.content}\n\n移动后保存。` })
+    expect((await store.getManagedMarkdownLibrary()).documents.find((item) => item.id === saved.id)?.folderId).toBe(archive.id)
+    expect(savedAfterMove.folderId).toBe(archive.id)
+    await store.deleteManagedMarkdownFolder(folder.id)
+
     const duplicate = await store.duplicateManagedMarkdownDocument(saved.id)
     expect(duplicate.title).toBe('登录接口 副本')
-    expect(duplicate.content).toBe(saved.content)
+    expect(duplicate.content).toBe(savedAfterMove.content)
+    expect(duplicate.folderId).toBe(archive.id)
 
     await store.trashManagedMarkdownDocument(saved.id)
     expect((await store.getManagedMarkdownLibrary()).documents.some((item) => item.id === saved.id)).toBe(false)
     const trash = (await store.listTrash()).find((item) => item.kind === 'managed-markdown')!
     await store.restoreTrash(trash.id)
-    expect((await store.getManagedMarkdownDocument(saved.id)).content).toBe(saved.content)
+    expect(await store.getManagedMarkdownDocument(saved.id)).toMatchObject({ content: savedAfterMove.content, folderId: archive.id })
   })
 
   it('rejects traversal and markdown write conflicts', async () => {

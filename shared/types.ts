@@ -46,6 +46,14 @@ export interface JsonDiffSelection {
 export interface JsonWorkspaceSummary {
   id: string
   title: string
+  folderId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface JsonFolder {
+  id: string
+  name: string
   createdAt: string
   updatedAt: string
 }
@@ -261,6 +269,7 @@ export interface TrashItem {
   originalLocation: string
   originalRelativePath?: string
   sourceId?: string
+  jsonWorkspace?: JsonWorkspaceSummary
   managedDocument?: ManagedMarkdownDocumentSummary
   fileWorkbenchItem?: FileWorkbenchItem
   deletedAt: string
@@ -319,14 +328,19 @@ export interface LocalBridge {
   getSettings(): Promise<AppSettings>
   updateSettings(settings: AppSettings): Promise<AppSettings>
   listJsonWorkspaces(): Promise<JsonWorkspaceSummary[]>
-  createJsonWorkspace(title?: string): Promise<JsonWorkspace>
+  listJsonFolders(): Promise<JsonFolder[]>
+  createJsonWorkspace(title?: string, folderId?: string): Promise<JsonWorkspace>
   getJsonWorkspace(id: string): Promise<JsonWorkspace>
   updateJsonWorkspace(workspace: JsonWorkspace): Promise<JsonWorkspace>
   renameJsonWorkspace(id: string, title: string): Promise<JsonWorkspaceSummary>
   duplicateJsonWorkspace(id: string): Promise<JsonWorkspace>
+  moveJsonWorkspace(id: string, folderId?: string): Promise<JsonWorkspaceSummary>
   trashJsonWorkspace(id: string): Promise<void>
   revealJsonWorkspace(id: string): Promise<void>
   getJsonWorkspaceFilePath(id: string): Promise<string>
+  createJsonFolder(name?: string): Promise<JsonFolder>
+  renameJsonFolder(id: string, name: string): Promise<JsonFolder>
+  deleteJsonFolder(id: string): Promise<void>
   getJsonScratchpad(): Promise<JsonScratchpad>
   updateJsonScratchpad(scratchpad: JsonScratchpad): Promise<JsonScratchpad>
   getColors(): Promise<ColorState>
@@ -354,6 +368,7 @@ export interface LocalBridge {
   getManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
   updateManagedMarkdownDocument(document: ManagedMarkdownDocument): Promise<ManagedMarkdownDocument>
   duplicateManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument>
+  moveManagedMarkdownDocument(id: string, folderId?: string): Promise<ManagedMarkdownDocumentSummary>
   trashManagedMarkdownDocument(id: string): Promise<void>
   revealManagedMarkdownDocument(id: string): Promise<void>
   getManagedMarkdownDocumentFilePath(id: string): Promise<string>

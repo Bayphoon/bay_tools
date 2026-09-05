@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, Files, FileText, Folder, FolderOpen, Home, Languages, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import type { ManagedMarkdownDocumentSummary, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
+import type { JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
 import { copyFilePath } from '../lib/clipboard'
 import { localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
@@ -15,6 +15,55 @@ function Menu({ children, triggerLabel = '更多操作', triggerIcon, alwaysVisi
 }
 
 const item = (label: string, action: () => void, danger = false) => <DropdownMenu.Item className={`dropdown-item ${danger ? 'danger' : ''}`} onSelect={action}>{label}</DropdownMenu.Item>
+
+function MoveToFolderSubmenu({ folders, currentFolderId, onMove }: { folders: Array<{ id: string; name: string }>; currentFolderId?: string; onMove: (folderId?: string) => void }) {
+  return <DropdownMenu.Sub>
+    <DropdownMenu.SubTrigger className="dropdown-item dropdown-sub-trigger">移动到分组<ChevronRight size={13} /></DropdownMenu.SubTrigger>
+    <DropdownMenu.Portal><DropdownMenu.SubContent className="dropdown-content" sideOffset={3} alignOffset={-4}>
+      <DropdownMenu.Item className="dropdown-item" disabled={!currentFolderId} onSelect={() => onMove(undefined)}>未分组</DropdownMenu.Item>
+      {folders.map((folder) => <DropdownMenu.Item key={folder.id} className="dropdown-item" disabled={folder.id === currentFolderId} onSelect={() => onMove(folder.id)}>{folder.name}</DropdownMenu.Item>)}
+    </DropdownMenu.SubContent></DropdownMenu.Portal>
+  </DropdownMenu.Sub>
+}
+
+function JsonWorkspaceRow({ workspace, folders, onChanged }: { workspace: JsonWorkspaceSummary; folders: JsonFolder[]; onChanged: () => Promise<void> }) {
+  const navigate = useNavigate()
+  return <div className="nav-child-wrap">
+    <NavLink className="nav-tree-row nav-file" to={`/json/${workspace.id}`}><span className="json-dot">{'{}'}</span><span>{workspace.title}</span></NavLink>
+    <Menu>{item('重命名', async () => {
+      const title = window.prompt('工作区名称', workspace.title)
+      if (!title || title === workspace.title) return
+      await localBridge.renameJsonWorkspace(workspace.id, title)
+      await onChanged()
+    })}{item('创建副本', async () => {
+      const duplicate = await localBridge.duplicateJsonWorkspace(workspace.id)
+      await onChanged()
+      navigate(`/json/${duplicate.id}`)
+    })}<MoveToFolderSubmenu folders={folders} currentFolderId={workspace.folderId} onMove={(folderId) => { void localBridge.moveJsonWorkspace(workspace.id, folderId).then(onChanged) }} />{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getJsonWorkspaceFilePath(workspace.id)) })}{item('移入垃圾箱', async () => {
+      if (!window.confirm(`将 ${workspace.title} 移入垃圾箱？`)) return
+      await localBridge.trashJsonWorkspace(workspace.id)
+      await onChanged()
+      navigate('/')
+    }, true)}</Menu>
+  </div>
+}
+
+function JsonFolderSection({ folder, folders, workspaces, onCreate, onChanged }: { folder: JsonFolder; folders: JsonFolder[]; workspaces: JsonWorkspaceSummary[]; onCreate: () => Promise<void>; onChanged: () => Promise<void> }) {
+  const [open, setOpen] = useState(true)
+  return <div className="source-tree json-folder-tree">
+    <div className="source-title"><button className="source-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}<span>{folder.name}</span></button><Menu>{item('添加空 JSON', () => { void onCreate() })}{item('重命名', async () => {
+      const name = window.prompt('分组名称', folder.name)?.trim()
+      if (!name || name === folder.name) return
+      await localBridge.renameJsonFolder(folder.id, name)
+      await onChanged()
+    })}{item('删除空分组', async () => {
+      if (workspaces.length || !window.confirm(`删除空分组 ${folder.name}？`)) return
+      await localBridge.deleteJsonFolder(folder.id)
+      await onChanged()
+    }, true)}</Menu></div>
+    {open && workspaces.map((workspace) => <JsonWorkspaceRow key={workspace.id} workspace={workspace} folders={folders} onChanged={onChanged} />)}
+  </div>
+}
 
 function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: string; nodes: MarkdownTreeNode[]; onChanged: () => Promise<void>; depth?: number }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -43,7 +92,7 @@ function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: st
   </div>)}</>
 }
 
-function ManagedDocumentRow({ document, onChanged }: { document: ManagedMarkdownDocumentSummary; onChanged: () => Promise<void> }) {
+function ManagedDocumentRow({ document, folders, onChanged }: { document: ManagedMarkdownDocumentSummary; folders: ManagedMarkdownFolder[]; onChanged: () => Promise<void> }) {
   const navigate = useNavigate()
   const location = useLocation()
   return <div className="nav-child-wrap">
@@ -58,7 +107,7 @@ function ManagedDocumentRow({ document, onChanged }: { document: ManagedMarkdown
       const duplicate = await localBridge.duplicateManagedMarkdownDocument(document.id)
       await onChanged()
       navigate(`/markdown/document/${duplicate.id}`)
-    })}{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getManagedMarkdownDocumentFilePath(document.id)) })}{item('移入垃圾箱', async () => {
+    })}<MoveToFolderSubmenu folders={folders} currentFolderId={document.folderId} onMove={(folderId) => { void localBridge.moveManagedMarkdownDocument(document.id, folderId).then(onChanged) }} />{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getManagedMarkdownDocumentFilePath(document.id)) })}{item('移入垃圾箱', async () => {
       if (!window.confirm(`将 ${document.title} 移入 BayTools 垃圾箱？`)) return
       await localBridge.trashManagedMarkdownDocument(document.id)
       await onChanged()
@@ -79,7 +128,7 @@ function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdo
   const rootDocuments = library.documents.filter((document) => !document.folderId)
   return <div className="source-tree managed-markdown-tree">
     <div className="source-title"><button className="source-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}<span>BayTools 文档</span></button></div>
-    {open && <>{rootDocuments.map((document) => <ManagedDocumentRow key={document.id} document={document} onChanged={onChanged} />)}{library.folders.map((folder) => {
+    {open && <>{rootDocuments.map((document) => <ManagedDocumentRow key={document.id} document={document} folders={library.folders} onChanged={onChanged} />)}{library.folders.map((folder) => {
       const documents = library.documents.filter((document) => document.folderId === folder.id)
       const collapsed = collapsedFolders[folder.id] ?? false
       return <div key={folder.id} className="managed-folder">
@@ -93,7 +142,7 @@ function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdo
           await localBridge.deleteManagedMarkdownFolder(folder.id)
           await onChanged()
         }, true)}</Menu></div>
-        {!collapsed && documents.map((document) => <ManagedDocumentRow key={document.id} document={document} onChanged={onChanged} />)}
+        {!collapsed && documents.map((document) => <ManagedDocumentRow key={document.id} document={document} folders={library.folders} onChanged={onChanged} />)}
       </div>
     })}</>}
   </div>
@@ -102,7 +151,7 @@ function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdo
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, settings, saveSettings } = useAppStore()
+  const { jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, settings, saveSettings } = useAppStore()
   const [jsonOpen, setJsonOpen] = useState(!settings?.sidebar.collapsedGroups.includes('json'))
   const [languageOpen, setLanguageOpen] = useState(!settings?.sidebar.collapsedGroups.includes('language'))
   const [markdownOpen, setMarkdownOpen] = useState(!settings?.sidebar.collapsedGroups.includes('markdown'))
@@ -128,10 +177,17 @@ export function Sidebar() {
     setGroupOpen(group, !open)
   }
 
-  const createWorkspace = async () => {
-    const workspace = await localBridge.createJsonWorkspace()
+  const createWorkspace = async (folderId?: string) => {
+    const workspace = await localBridge.createJsonWorkspace(undefined, folderId)
     await refreshJson()
     navigate(`/json/${workspace.id}`)
+  }
+
+  const createJsonFolder = async () => {
+    const name = window.prompt('分组名称', '未命名分组')?.trim()
+    if (!name) return
+    await localBridge.createJsonFolder(name)
+    await refreshJson()
   }
 
   const createLanguageSource = async () => {
@@ -201,26 +257,12 @@ export function Sidebar() {
       <div className="nav-group">
         <div className="nav-parent">
           <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><Braces size={16} /><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
-          <button className="icon-button nav-action" aria-label="新建 JSON 工作区" onClick={createWorkspace}><Plus size={15} /></button>
+          <Menu triggerLabel="添加 JSON 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 JSON', () => { void createWorkspace() })}{item('添加分组', () => { void createJsonFolder() })}</Menu>
         </div>
-        {jsonOpen && <div className="nav-children">{jsonWorkspaces.map((workspace) => <div className="nav-child-wrap" key={workspace.id}>
-          <NavLink className="nav-tree-row nav-file" to={`/json/${workspace.id}`}><span className="json-dot">{'{}'}</span><span>{workspace.title}</span></NavLink>
-          <Menu>{item('重命名', async () => {
-            const title = window.prompt('工作区名称', workspace.title)
-            if (!title || title === workspace.title) return
-            await localBridge.renameJsonWorkspace(workspace.id, title)
-            await refreshJson()
-          })}{item('创建副本', async () => {
-            const duplicate = await localBridge.duplicateJsonWorkspace(workspace.id)
-            await refreshJson()
-            navigate(`/json/${duplicate.id}`)
-          })}{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getJsonWorkspaceFilePath(workspace.id)) })}{item('移入垃圾箱', async () => {
-            if (!window.confirm(`将 ${workspace.title} 移入垃圾箱？`)) return
-            await localBridge.trashJsonWorkspace(workspace.id)
-            await refreshJson()
-            navigate('/')
-          }, true)}</Menu>
-        </div>)}</div>}
+        {jsonOpen && <div className="nav-children">
+          {jsonWorkspaces.filter((workspace) => !workspace.folderId).map((workspace) => <JsonWorkspaceRow key={workspace.id} workspace={workspace} folders={jsonFolders} onChanged={refreshJson} />)}
+          {jsonFolders.map((folder) => <JsonFolderSection key={folder.id} folder={folder} folders={jsonFolders} workspaces={jsonWorkspaces.filter((workspace) => workspace.folderId === folder.id)} onCreate={() => createWorkspace(folder.id)} onChanged={refreshJson} />)}
+        </div>}
       </div>
       <div className="nav-group">
         <div className="nav-parent">
