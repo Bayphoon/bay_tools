@@ -1,7 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs'
-import { LayoutGrid, Monitor, Moon, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
+import { Download, GitBranch, LayoutGrid, Monitor, Moon, RotateCcw, Sun, Sunrise, Trash2, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
+import type { AppSettings, PersonalDataStatus, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
 import { applyTheme } from '../hooks/useTheme'
@@ -22,8 +22,14 @@ export function SettingsPage() {
   const [shortcutBusy, setShortcutBusy] = useState<ShortcutLocation>()
   const [shortcutMessage, setShortcutMessage] = useState('')
   const [shortcutError, setShortcutError] = useState('')
+  const [personalData, setPersonalData] = useState<PersonalDataStatus>()
+  const [personalDataBusy, setPersonalDataBusy] = useState<'sync' | 'restore'>()
+  const [personalDataMessage, setPersonalDataMessage] = useState('')
+  const [personalDataError, setPersonalDataError] = useState('')
   const loadTrash = async () => setTrash(await localBridge.listTrash())
+  const loadPersonalData = async () => setPersonalData(await localBridge.getPersonalDataStatus())
   useEffect(() => { void loadTrash().catch((value) => setError(value.message)) }, [])
+  useEffect(() => { void loadPersonalData().catch((value) => setPersonalDataError(value instanceof Error ? value.message : '个人数据状态加载失败')) }, [])
   useEffect(() => setDraft(settings), [settings])
   useEffect(() => {
     applyTheme(draft)
@@ -48,6 +54,36 @@ export function SettingsPage() {
       setShortcutBusy(undefined)
     }
   }
+  const syncPersonalData = async () => {
+    if (!personalData) return
+    const force = personalData.state === 'snapshot-newer' || personalData.state === 'diverged'
+    if (force && !window.confirm('分支快照包含尚未恢复的修改。确定用当前本机数据覆盖快照吗？')) return
+    setPersonalDataBusy('sync')
+    setPersonalDataMessage('')
+    setPersonalDataError('')
+    try {
+      const result = await localBridge.syncPersonalData(force)
+      setPersonalData(result.status)
+      setPersonalDataMessage(result.changed ? '个人数据快照已更新，请检查并提交 UserData 的 Git 变更。' : '本机数据与分支快照一致，无需更新。')
+    } catch (value) {
+      setPersonalDataError(value instanceof Error ? value.message : '个人数据同步失败')
+    } finally {
+      setPersonalDataBusy(undefined)
+    }
+  }
+  const restorePersonalData = async () => {
+    if (!personalData?.snapshotExists || !window.confirm('这会用当前用户分支的快照覆盖本机个人数据，是否继续？')) return
+    setPersonalDataBusy('restore')
+    setPersonalDataMessage('')
+    setPersonalDataError('')
+    try {
+      await localBridge.restorePersonalData(true)
+      window.location.reload()
+    } catch (value) {
+      setPersonalDataError(value instanceof Error ? value.message : '个人数据恢复失败')
+      setPersonalDataBusy(undefined)
+    }
+  }
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
     try {
       const result = await localBridge.restoreTrash(item.id, asCopy, targetDirectory)
@@ -63,9 +99,9 @@ export function SettingsPage() {
     }
   }
   return <div className="page">
-    <PageHeader title="设置" description="调整 BayTools 外观、启动方式并管理本地垃圾箱" />
+    <PageHeader title="设置" description="调整 BayTools 外观、启动方式并管理个人数据与本地垃圾箱" />
     <Tabs.Root defaultValue="appearance" className="settings-tabs">
-      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
+      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="personal-data">个人数据</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
       <Tabs.Content value="appearance" className="settings-content">
         <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">THEME MODE</span><h2>外观模式</h2></div></div>
           <div className="theme-mode-grid">{([
@@ -88,6 +124,25 @@ export function SettingsPage() {
         {shortcutMessage && <div className="shortcut-result" role="status">{shortcutMessage}</div>}
         <InlineError>{shortcutError}</InlineError>
         <section className="settings-section shortcut-note"><strong>固定到任务栏</strong><p>先创建开始菜单快捷方式，再在开始菜单中右键 BayTools，选择“固定到任务栏”。Windows 11 不允许网页直接完成固定操作。</p></section>
+      </Tabs.Content>
+      <Tabs.Content value="personal-data" className="settings-content">
+        <div className="section-heading"><div><span className="eyebrow">PERSONAL DATA</span><h2>个人数据同步</h2><p>本机数据始终保存在 Doc；用户分支只保存可提交的 UserData 快照。</p></div></div>
+        <section className="settings-section personal-data-status">
+          <div className="personal-data-heading"><GitBranch size={22} /><div><strong>{personalData?.branch ?? '未识别 Git 分支'}</strong><span>{personalData?.eligible ? `用户：${personalData.user}` : '请切换到 user/&lt;用户名&gt; 分支后同步'}</span></div></div>
+          {personalData && <dl className="personal-data-details">
+            <div><dt>同步状态</dt><dd>{({ unavailable: '当前分支不可同步', ready: '已同步', 'runtime-newer': '本机数据有更新', 'snapshot-newer': '分支快照有更新', diverged: '本机与快照均有更新' })[personalData.state]}</dd></div>
+            <div><dt>快照内容</dt><dd>{personalData.fileCount} 个文件 · {formatSize(personalData.totalBytes)}</dd></div>
+            <div><dt>快照路径</dt><dd className="mono">{personalData.snapshotPath ?? '—'}</dd></div>
+            <div><dt>上次同步</dt><dd>{personalData.lastSyncedAt ? new Date(personalData.lastSyncedAt).toLocaleString() : '尚未同步'}</dd></div>
+          </dl>}
+          <div className="personal-data-actions">
+            <ToolButton className="primary" disabled={!personalData?.eligible || Boolean(personalDataBusy)} onClick={() => void syncPersonalData()}><Upload size={14} />{personalDataBusy === 'sync' ? '同步中' : '同步到当前用户分支'}</ToolButton>
+            <ToolButton disabled={!personalData?.eligible || !personalData.snapshotExists || Boolean(personalDataBusy)} onClick={() => void restorePersonalData()}><Download size={14} />{personalDataBusy === 'restore' ? '恢复中' : '从分支恢复'}</ToolButton>
+          </div>
+        </section>
+        {personalDataMessage && <div className="shortcut-result" role="status">{personalDataMessage}</div>}
+        <InlineError>{personalDataError}</InlineError>
+        <section className="settings-section shortcut-note"><strong>Git 提交由你控制</strong><p>同步只更新 UserData 快照，不会自动暂存、提交或推送。main 分支始终不会生成个人数据快照。</p></section>
       </Tabs.Content>
       <Tabs.Content value="trash" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>

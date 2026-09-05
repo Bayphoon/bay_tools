@@ -282,6 +282,26 @@ export interface ShortcutResult {
   replaced: boolean
 }
 
+export type PersonalDataSyncState = 'unavailable' | 'ready' | 'runtime-newer' | 'snapshot-newer' | 'diverged'
+
+export interface PersonalDataStatus {
+  branch: string | null
+  user?: string
+  eligible: boolean
+  state: PersonalDataSyncState
+  runtimeHasData: boolean
+  snapshotExists: boolean
+  snapshotPath?: string
+  fileCount: number
+  totalBytes: number
+  lastSyncedAt?: string
+}
+
+export interface PersonalDataSyncResult {
+  changed: boolean
+  status: PersonalDataStatus
+}
+
 export interface LocalBridge {
   getSettings(): Promise<AppSettings>
   updateSettings(settings: AppSettings): Promise<AppSettings>
@@ -300,6 +320,9 @@ export interface LocalBridge {
   updateColors(state: ColorState): Promise<ColorState>
   selectDirectory(): Promise<string | null>
   createShortcut(location: ShortcutLocation): Promise<ShortcutResult>
+  getPersonalDataStatus(): Promise<PersonalDataStatus>
+  syncPersonalData(force?: boolean): Promise<PersonalDataSyncResult>
+  restorePersonalData(confirm: boolean): Promise<PersonalDataSyncResult>
   listMarkdownSources(): Promise<MarkdownSource[]>
   addMarkdownSource(path: string): Promise<MarkdownSource>
   updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource>

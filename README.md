@@ -38,4 +38,36 @@ npm run build
 - `Doc/markdown`：扫描目录与阅读器状态；Markdown 原文件仍位于扫描目录。
 - `Doc/trash`：可恢复的 JSON 工作区与 Markdown 文件。
 
-`Doc/.gitignore` 会隔离运行数据。Markdown 的彻底删除、垃圾箱清空等操作不可恢复，界面会在执行前要求确认。
+`Doc/.gitignore` 会在所有分支中隔离整个运行目录。切换代码分支不会删除或替换本机数据。Markdown 的彻底删除、垃圾箱清空等操作不可恢复，界面会在执行前要求确认。
+
+## 用户分支与个人数据同步
+
+个人数据分支统一命名为 `user/<用户名>`。`main` 只维护代码，用户分支通过 `UserData/<用户名>` 保存可提交的个人数据快照。快照包含设置、JSON、颜色、语言数据、托管 Markdown 和文件工作台；日志、垃圾箱、本机 Markdown 扫描路径和服务器状态不会同步。
+
+新用户从 `main` 创建自己的分支：
+
+```powershell
+git switch main
+git switch -c user/alice
+npm run start
+```
+
+使用 BayTools 后，可以在“设置 → 个人数据”中点击“同步到当前用户分支”，也可以运行：
+
+```powershell
+npm run data:status
+npm run data:sync
+git add UserData/alice
+git commit -m "[alice] 同步个人数据"
+git push -u origin user/alice
+```
+
+同步只生成快照，不会自动暂存、提交或推送。若分支快照和本机数据都发生了变化，BayTools 会停止同步并要求明确选择恢复快照或用本机数据覆盖。
+
+在新电脑首次从用户分支启动时，如果 `Doc` 中还没有个人数据，BayTools 会自动恢复对应快照。已有本机数据时可在设置页确认恢复，或运行：
+
+```powershell
+npm run data:restore -- --confirm
+```
+
+维护者可在 `main` 与自己的 `user/*` 分支之间切换；两者继续使用同一个本机 `Doc`。需要提交个人数据时，先切回自己的用户分支再同步。用户分支通过合并或变基 `main` 获取功能更新，不应合并回 `main`。

@@ -15,12 +15,14 @@ import { BayToolsStore } from './store.js'
 import { selectWindowsFolder } from './folderDialog.js'
 import { createWindowsShortcut } from './shortcut.js'
 import { parseSingleByteRange } from './fileRange.js'
+import { PersonalDataManager } from './personalData.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
-const apiVersion = 9
+const personalDataManager = new PersonalDataManager(projectRoot)
+const apiVersion = 10
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -184,6 +186,14 @@ app.post<{ Body: { location?: ShortcutLocation } }>('/api/system/shortcut', asyn
   return createWindowsShortcut(projectRoot, location)
 })
 
+app.get('/api/personal-data/status', async () => personalDataManager.getStatus())
+app.post<{ Body: { force?: boolean } }>('/api/personal-data/sync', async (request) => personalDataManager.sync(request.body?.force === true))
+app.post<{ Body: { confirm?: boolean } }>('/api/personal-data/restore', async (request) => {
+  const result = await personalDataManager.restore(request.body?.confirm === true)
+  languageStore.clearCache()
+  return result
+})
+
 app.get('/api/markdown/sources', async () => store.listMarkdownSources())
 app.get('/api/markdown/ui-state', async () => store.getMarkdownUiState())
 app.put<{ Body: MarkdownUiState }>('/api/markdown/ui-state', async (request) => store.updateMarkdownUiState(request.body))
@@ -271,6 +281,7 @@ async function registerFrontend(): Promise<void> {
 }
 
 export async function buildApp(options?: { serveFrontend?: boolean }) {
+  await personalDataManager.autoRestoreIfEmpty()
   // 主存储初始化会清理整个 Doc 下遗留的原子写入临时文件，必须先于其他存储执行。
   await store.init()
   await Promise.all([languageStore.init(), serverStatusStore.init()])
