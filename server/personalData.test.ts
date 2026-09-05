@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, open, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PersonalDataManager } from './personalData.js'
+import { PERSONAL_DATA_GIT_FILE_LIMIT, PersonalDataManager } from './personalData.js'
 
 const execFileAsync = promisify(execFile)
 const roots: string[] = []
@@ -25,6 +25,25 @@ async function write(root: string, relativePath: string, content: string): Promi
   const path = join(root, relativePath)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, content, 'utf8')
+}
+
+async function createPublishingRepo(): Promise<{ root: string; remote: string; manager: PersonalDataManager; git: (...args: string[]) => ReturnType<typeof execFileAsync> }> {
+  const root = await mkdtemp(join(tmpdir(), 'baytools-personal-publish-'))
+  const remote = await mkdtemp(join(tmpdir(), 'baytools-personal-remote-'))
+  roots.push(root, remote)
+  const git = (...args: string[]) => execFileAsync('git', args, { cwd: root, windowsHide: true })
+  await git('init', '-b', 'user/alice')
+  await git('config', 'user.name', 'BayTools Test')
+  await git('config', 'user.email', 'baytools@example.test')
+  await write(root, 'README.md', 'test')
+  await write(root, 'Doc/.gitignore', '*\n!.gitignore\n')
+  await write(root, 'UserData/.gitignore', '.*.tmp-*\n.*.bak-*\n')
+  await git('add', 'README.md', 'Doc/.gitignore', 'UserData/.gitignore')
+  await git('commit', '-m', 'base')
+  await execFileAsync('git', ['init', '--bare', remote], { windowsHide: true })
+  await git('remote', 'add', 'origin', remote)
+  await git('push', '--set-upstream', 'origin', 'user/alice')
+  return { root, remote, manager: new PersonalDataManager(root), git }
 }
 
 afterEach(async () => {
@@ -140,5 +159,62 @@ describe('Git branch isolation', () => {
     expect(await readFile(join(root, 'Doc/settings.json'), 'utf8')).toBe('local runtime data')
     await git('switch', 'user/alice')
     expect(await readFile(join(root, 'Doc/settings.json'), 'utf8')).toBe('local runtime data')
+  })
+})
+
+describe('personal data publishing', () => {
+  it('commits only the user snapshot and pushes it to origin', async () => {
+    const { root, remote, manager, git } = await createPublishingRepo()
+    await write(root, 'Doc/settings.json', 'personal settings')
+    await write(root, 'notes.txt', 'unrelated working tree file')
+
+    const result = await manager.publish(true)
+    expect(result).toMatchObject({ commitCreated: true, pushed: true, branch: 'user/alice', remoteName: 'origin' })
+    const remoteSettings = await execFileAsync('git', ['--git-dir', remote, 'show', 'user/alice:UserData/alice/settings.json'], { windowsHide: true })
+    expect(remoteSettings.stdout.toString()).toBe('personal settings')
+    await expect(git('show', 'HEAD:notes.txt')).rejects.toThrow()
+    expect((await git('status', '--porcelain')).stdout.toString()).toContain('?? notes.txt')
+
+    await expect(manager.publish(true)).resolves.toMatchObject({ syncChanged: false, commitCreated: false, pushed: true })
+  })
+
+  it('refuses to publish with unrelated staged changes', async () => {
+    const { root, manager, git } = await createPublishingRepo()
+    await write(root, 'Doc/settings.json', 'personal settings')
+    await write(root, 'code.ts', 'const changed = true')
+    await git('add', 'code.ts')
+
+    await expect(manager.publish(true)).rejects.toMatchObject({ code: 'UNRELATED_STAGED_CHANGES' })
+    expect((await git('diff', '--cached', '--name-only')).stdout.toString().trim()).toBe('code.ts')
+  })
+
+  it('refuses to overwrite a remote branch that has advanced', async () => {
+    const { root, remote, manager } = await createPublishingRepo()
+    const other = await mkdtemp(join(tmpdir(), 'baytools-personal-other-'))
+    roots.push(other)
+    await execFileAsync('git', ['clone', '--branch', 'user/alice', remote, other], { windowsHide: true })
+    const otherGit = (...args: string[]) => execFileAsync('git', args, { cwd: other, windowsHide: true })
+    await otherGit('config', 'user.name', 'Other Device')
+    await otherGit('config', 'user.email', 'other@example.test')
+    await write(other, 'remote.txt', 'new remote commit')
+    await otherGit('add', 'remote.txt')
+    await otherGit('commit', '-m', 'remote update')
+    await otherGit('push', 'origin', 'user/alice')
+    await write(root, 'Doc/settings.json', 'local settings')
+
+    await expect(manager.publish(true)).rejects.toMatchObject({ code: 'REMOTE_BRANCH_DIVERGED' })
+    await expect(access(join(root, 'UserData/alice/settings.json'))).rejects.toThrow()
+  })
+
+  it('blocks oversized files before creating a snapshot', async () => {
+    const { root, manager } = await createPublishingRepo()
+    const path = join(root, 'Doc/file-workbench/items/large/content.bin')
+    await mkdir(dirname(path), { recursive: true })
+    const handle = await open(path, 'w')
+    await handle.truncate(PERSONAL_DATA_GIT_FILE_LIMIT + 1)
+    await handle.close()
+
+    await expect(manager.publish(true)).rejects.toMatchObject({ code: 'PERSONAL_DATA_FILE_TOO_LARGE' })
+    await expect(access(join(root, 'UserData/alice/file-workbench/items/large/content.bin'))).rejects.toThrow()
   })
 })

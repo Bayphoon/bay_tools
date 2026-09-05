@@ -17,6 +17,10 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(await manager.restore(flags.has('--confirm')), null, 2))
     return
   }
+  if (command === 'publish') {
+    console.log(JSON.stringify(await manager.publish(flags.has('--confirm'), flags.has('--force')), null, 2))
+    return
+  }
   throw new Error(`未知命令：${command}`)
 }
 

@@ -12,6 +12,7 @@
     "start": "npm run build && node dist-server/server/index.js",
     "data:status": "tsx server/personalDataCli.ts status",
     "data:sync": "tsx server/personalDataCli.ts sync",
+    "data:publish": "tsx server/personalDataCli.ts publish",
     "data:restore": "tsx server/personalDataCli.ts restore",
     "test": "vitest run",
     "test:watch": "vitest",

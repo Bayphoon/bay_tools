@@ -23,7 +23,7 @@ export function SettingsPage() {
   const [shortcutMessage, setShortcutMessage] = useState('')
   const [shortcutError, setShortcutError] = useState('')
   const [personalData, setPersonalData] = useState<PersonalDataStatus>()
-  const [personalDataBusy, setPersonalDataBusy] = useState<'sync' | 'restore'>()
+  const [personalDataBusy, setPersonalDataBusy] = useState<'sync' | 'restore' | 'publish'>()
   const [personalDataMessage, setPersonalDataMessage] = useState('')
   const [personalDataError, setPersonalDataError] = useState('')
   const loadTrash = async () => setTrash(await localBridge.listTrash())
@@ -84,6 +84,26 @@ export function SettingsPage() {
       setPersonalDataBusy(undefined)
     }
   }
+  const publishPersonalData = async () => {
+    if (!personalData?.eligible) return
+    const force = personalData.state === 'snapshot-newer' || personalData.state === 'diverged'
+    const warning = force ? '\n\n分支快照与本机数据存在差异，本次操作将以本机数据覆盖快照。' : ''
+    const target = `${personalData.remoteName ?? 'origin'}${personalData.remoteUrl ? ` (${personalData.remoteUrl})` : ''}`
+    if (!window.confirm(`将同步、提交并推送个人数据：\n\n分支：${personalData.branch}\n远端：${target}\n数据：${personalData.fileCount} 个文件，${formatSize(personalData.totalBytes)}\n\n只会提交 UserData/${personalData.user}，但会推送当前分支已有的全部本地提交。${warning}\n\n是否继续？`)) return
+    setPersonalDataBusy('publish')
+    setPersonalDataMessage('')
+    setPersonalDataError('')
+    try {
+      const result = await localBridge.publishPersonalData(true, force)
+      setPersonalData(result.status)
+      setPersonalDataMessage(result.commitCreated ? `个人数据已提交并推送：${result.commit.slice(0, 8)}` : '没有新的个人数据提交；当前用户分支已推送到远端。')
+    } catch (value) {
+      setPersonalDataError(value instanceof Error ? value.message : '个人数据提交或推送失败')
+      await loadPersonalData().catch(() => undefined)
+    } finally {
+      setPersonalDataBusy(undefined)
+    }
+  }
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
     try {
       const result = await localBridge.restoreTrash(item.id, asCopy, targetDirectory)
@@ -133,16 +153,18 @@ export function SettingsPage() {
             <div><dt>同步状态</dt><dd>{({ unavailable: '当前分支不可同步', ready: '已同步', 'runtime-newer': '本机数据有更新', 'snapshot-newer': '分支快照有更新', diverged: '本机与快照均有更新' })[personalData.state]}</dd></div>
             <div><dt>快照内容</dt><dd>{personalData.fileCount} 个文件 · {formatSize(personalData.totalBytes)}</dd></div>
             <div><dt>快照路径</dt><dd className="mono">{personalData.snapshotPath ?? '—'}</dd></div>
+            <div><dt>Git 远端</dt><dd className="mono">{personalData.remoteUrl ?? '未配置 origin'}</dd></div>
             <div><dt>上次同步</dt><dd>{personalData.lastSyncedAt ? new Date(personalData.lastSyncedAt).toLocaleString() : '尚未同步'}</dd></div>
           </dl>}
           <div className="personal-data-actions">
-            <ToolButton className="primary" disabled={!personalData?.eligible || Boolean(personalDataBusy)} onClick={() => void syncPersonalData()}><Upload size={14} />{personalDataBusy === 'sync' ? '同步中' : '同步到当前用户分支'}</ToolButton>
+            <ToolButton disabled={!personalData?.eligible || Boolean(personalDataBusy)} onClick={() => void syncPersonalData()}><Upload size={14} />{personalDataBusy === 'sync' ? '同步中' : '同步到当前用户分支'}</ToolButton>
             <ToolButton disabled={!personalData?.eligible || !personalData.snapshotExists || Boolean(personalDataBusy)} onClick={() => void restorePersonalData()}><Download size={14} />{personalDataBusy === 'restore' ? '恢复中' : '从分支恢复'}</ToolButton>
+            <ToolButton className="primary" disabled={!personalData?.eligible || !personalData.remoteUrl || Boolean(personalDataBusy)} onClick={() => void publishPersonalData()}><GitBranch size={14} />{personalDataBusy === 'publish' ? '提交并推送中' : '同步、提交并推送'}</ToolButton>
           </div>
         </section>
         {personalDataMessage && <div className="shortcut-result" role="status">{personalDataMessage}</div>}
         <InlineError>{personalDataError}</InlineError>
-        <section className="settings-section shortcut-note"><strong>Git 提交由你控制</strong><p>同步只更新 UserData 快照，不会自动暂存、提交或推送。main 分支始终不会生成个人数据快照。</p></section>
+        <section className="settings-section shortcut-note"><strong>安全提交范围</strong><p>自动发布只提交当前用户的 UserData 目录，不会提交代码，且不会强推。远端有本机尚未合并的提交或存在其他已暂存文件时会停止。main 分支始终禁用个人数据发布。</p></section>
       </Tabs.Content>
       <Tabs.Content value="trash" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>

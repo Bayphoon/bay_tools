@@ -287,6 +287,8 @@ export type PersonalDataSyncState = 'unavailable' | 'ready' | 'runtime-newer' | 
 export interface PersonalDataStatus {
   branch: string | null
   user?: string
+  remoteName?: string
+  remoteUrl?: string
   eligible: boolean
   state: PersonalDataSyncState
   runtimeHasData: boolean
@@ -299,6 +301,17 @@ export interface PersonalDataStatus {
 
 export interface PersonalDataSyncResult {
   changed: boolean
+  status: PersonalDataStatus
+}
+
+export interface PersonalDataPublishResult {
+  syncChanged: boolean
+  commitCreated: boolean
+  commit: string
+  pushed: boolean
+  branch: string
+  remoteName: string
+  remoteUrl: string
   status: PersonalDataStatus
 }
 
@@ -323,6 +336,7 @@ export interface LocalBridge {
   getPersonalDataStatus(): Promise<PersonalDataStatus>
   syncPersonalData(force?: boolean): Promise<PersonalDataSyncResult>
   restorePersonalData(confirm: boolean): Promise<PersonalDataSyncResult>
+  publishPersonalData(confirm: boolean, force?: boolean): Promise<PersonalDataPublishResult>
   listMarkdownSources(): Promise<MarkdownSource[]>
   addMarkdownSource(path: string): Promise<MarkdownSource>
   updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource>

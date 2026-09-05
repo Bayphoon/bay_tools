@@ -31,5 +31,7 @@ describe('local service security boundary', () => {
 
     const denied = await service.inject({ method: 'POST', url: '/api/personal-data/sync', headers: { host: '127.0.0.1:4319' }, payload: {} })
     expect(denied.statusCode).toBe(403)
+    const publishDenied = await service.inject({ method: 'POST', url: '/api/personal-data/publish', headers: { host: '127.0.0.1:4319' }, payload: { confirm: true } })
+    expect(publishDenied.statusCode).toBe(403)
   })
 })
