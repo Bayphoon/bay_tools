@@ -22,7 +22,7 @@ const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 10
+const apiVersion = 11
 const sessionToken = randomBytes(32).toString('base64url')
 const quietLogger = process.env.NODE_ENV === 'production' || process.argv.includes('--open')
 const app = Fastify({
@@ -192,6 +192,9 @@ app.post<{ Body: { confirm?: boolean } }>('/api/personal-data/restore', async (r
   const result = await personalDataManager.restore(request.body?.confirm === true)
   languageStore.clearCache()
   return result
+})
+app.post<{ Body: { confirm?: boolean; force?: boolean } }>('/api/personal-data/publish', async (request) => {
+  return personalDataManager.publish(request.body?.confirm === true, request.body?.force === true)
 })
 
 app.get('/api/markdown/sources', async () => store.listMarkdownSources())
