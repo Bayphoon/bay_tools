@@ -10,6 +10,7 @@
     "dev": "concurrently -k -n api,web -c cyan,magenta \"tsx watch server/index.ts\" \"vite\"",
     "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
     "start": "npm run build && node dist-server/server/index.js",
+    "start:built": "node dist-server/server/index.js --open",
     "data:status": "tsx server/personalDataCli.ts status",
     "data:sync": "tsx server/personalDataCli.ts sync",
     "data:publish": "tsx server/personalDataCli.ts publish",

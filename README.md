@@ -7,7 +7,7 @@
 环境要求：Node.js 20.18+。npm 随 Node.js 安装；pnpm 仅作为可选的开发包管理器。
 
 ```powershell
-npm install --no-package-lock
+npm ci
 npm run dev
 ```
 
@@ -19,7 +19,7 @@ npm run dev
 npm run start
 ```
 
-也可以双击 `BayTools.cmd`。生产地址为 `http://127.0.0.1:4319`，启动后会打开默认浏览器。需要安装依赖、构建或重启旧服务时，启动器会显示进度窗口，并将详细输出写入 `Doc/logs/baytools.log`。
+也可以双击 `BayTools.cmd`。生产地址为 `http://127.0.0.1:4319`，启动后会打开默认浏览器。启动器使用 `package-lock.json` 和构建元数据判断是否需要更新：只有锁文件变化才重新执行 `npm ci`，只有源码变化才重新构建，并且会在新构建成功后才停止旧服务。详细输出写入 `Doc/logs/baytools.log`。
 
 关闭浏览器页签不会停止后台服务。再次运行 BayTools 快捷方式时，启动器会比较 API 版本和当前源码指纹；切换分支、更新代码、服务崩溃或版本不兼容时都会自动重启。服务仍能响应但工作异常时，也可以在“设置 → 快捷方式 → 后台服务”中手动重启。
 
