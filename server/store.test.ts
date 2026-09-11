@@ -142,6 +142,17 @@ describe('BayToolsStore', () => {
     expect(await readFile(join(docs, 'guide', 'readme.md'), 'utf8')).toBe('# Updated')
   })
 
+  it('migrates and persists Markdown table-of-contents preferences', async () => {
+    const statePath = join(root, 'Doc', 'markdown', 'ui-state.json')
+    const legacy = await store.getMarkdownUiState()
+    await writeFile(statePath, JSON.stringify({ schemaVersion: 1, updatedAt: legacy.updatedAt, revision: legacy.revision, mode: 'preview' }), 'utf8')
+
+    const migrated = await store.getMarkdownUiState()
+    expect(migrated).toMatchObject({ mode: 'preview', tocOpen: true, syncScroll: true })
+    const saved = await store.updateMarkdownUiState({ ...migrated, tocOpen: false, syncScroll: false })
+    expect(await store.getMarkdownUiState()).toMatchObject({ revision: saved.revision, tocOpen: false, syncScroll: false })
+  })
+
   it('creates folders and auto-save ready managed Markdown documents', async () => {
     const folder = await store.createManagedMarkdownFolder('接口记录')
     const archive = await store.createManagedMarkdownFolder('归档')

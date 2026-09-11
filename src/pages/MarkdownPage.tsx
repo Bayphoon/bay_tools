@@ -1,20 +1,15 @@
-import Editor from '@monaco-editor/react'
-import { Copy, Eye, FileCode2, FolderOpen, FolderPlus, Pencil, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
+import { Copy, Eye, FileCode2, FolderOpen, FolderPlus, List, Pencil, RefreshCw, Save, SplitSquareHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import rehypeRaw from 'rehype-raw'
-import rehypeSanitize from 'rehype-sanitize'
-import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
-import type { MarkdownDocument, MarkdownSourceTree, MarkdownUiState } from '../../shared/types'
+import type { MarkdownDocument, MarkdownSourceTree } from '../../shared/types'
+import { MarkdownWorkspace } from '../components/MarkdownWorkspace'
 import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
+import { useMarkdownViewState } from '../hooks/useMarkdownViewState'
 import { ApiError, assetUrl, localBridge } from '../lib/api'
 import { copyFilePath } from '../lib/clipboard'
 import { useAppStore } from '../store/appStore'
 import { ManagedMarkdownPage } from './ManagedMarkdownPage'
-
-type MarkdownMode = 'source' | 'preview' | 'split'
 
 function countMarkdownFiles(nodes: MarkdownSourceTree['children']): number {
   return nodes.reduce((count, node) => count + (node.type === 'file' ? 1 : countMarkdownFiles(node.children ?? [])), 0)
@@ -44,14 +39,6 @@ function LocalImage({ sourceId, documentPath, src, alt }: { sourceId: string; do
   return url ? <img src={url} alt={alt ?? ''} /> : <span className="image-loading">正在加载图片…</span>
 }
 
-function MarkdownPreview({ sourceId, documentPath, content }: { sourceId: string; documentPath: string; content: string }) {
-  const components = useMemo<Components>(() => ({
-    img: (props) => <LocalImage sourceId={sourceId} documentPath={documentPath} src={props.src} alt={props.alt} />,
-    a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
-  }), [sourceId, documentPath])
-  return <article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={components}>{content}</ReactMarkdown></article>
-}
-
 function ExternalMarkdownPage() {
   const { sourceId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -60,8 +47,8 @@ function ExternalMarkdownPage() {
   const { markdownTrees, refreshMarkdown, setMarkdownDirty } = useAppStore()
   const [document, setDocument] = useState<MarkdownDocument>()
   const [content, setContent] = useState('')
-  const [mode, setMode] = useState<MarkdownMode>('split')
-  const [uiState, setUiState] = useState<MarkdownUiState>()
+  const { mode, tocOpen, syncScroll, changeMode, toggleToc, toggleSyncScroll } = useMarkdownViewState()
+  const [headingCount, setHeadingCount] = useState(0)
   const [dirty, setDirty] = useState(false)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'conflict' | 'error'>('idle')
   const [error, setError] = useState('')
@@ -80,12 +67,10 @@ function ExternalMarkdownPage() {
     setDocument(undefined); setError(''); setDirty(false)
     void localBridge.getMarkdownDocument(sourceId, path).then((value) => { setDocument(value); setContent(value.content) }).catch((value) => setError(value.message))
   }, [sourceId, path])
-  useEffect(() => { void localBridge.getMarkdownUiState().then((value) => { setUiState(value); setMode(value.mode) }) }, [])
-
-  const changeMode = (nextMode: MarkdownMode) => {
-    setMode(nextMode)
-    if (uiState) void localBridge.updateMarkdownUiState({ ...uiState, mode: nextMode }).then(setUiState).catch(() => undefined)
-  }
+  const previewComponents = useMemo<Components>(() => ({
+    img: (props) => <LocalImage sourceId={sourceId ?? ''} documentPath={path} src={props.src} alt={props.alt} />,
+    a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+  }), [sourceId, path])
 
   const save = async () => {
     if (!document) return
@@ -154,11 +139,8 @@ function ExternalMarkdownPage() {
   return <div className="page full-height-page markdown-page">
     <PageHeader title={path.split('/').at(-1) ?? 'Markdown'} description={path} actions={<><div className="save-status"><span className={`save-dot ${status}`} />{dirty ? '未保存' : status === 'saved' ? '已保存' : status === 'conflict' ? '文件冲突' : '磁盘文件'}</div><ToolButton onClick={() => localBridge.revealMarkdownDocument(document.sourceId, document.relativePath)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={() => void copyFilePath(() => localBridge.getMarkdownDocumentFilePath(document.sourceId, document.relativePath))}><Copy size={14} />复制文件路径</ToolButton><ToolButton onClick={renameDocument}>重命名</ToolButton><ToolButton className="danger" onClick={trashDocument}><Trash2 size={14} />删除</ToolButton><ToolButton className="primary" disabled={!dirty || status === 'saving'} onClick={save}><Save size={14} />保存</ToolButton></>} />
     {status === 'conflict' && <div className="conflict-banner"><span>磁盘文件已经变化。重新加载会丢弃当前编辑内容。</span><ToolButton onClick={async () => { const value = await localBridge.getMarkdownDocument(document.sourceId, document.relativePath); setDocument(value); setContent(value.content); setDirty(false); setStatus('idle') }}>重新加载</ToolButton></div>}
-    <div className="markdown-toolbar"><div className="segmented"><button className={mode === 'source' ? 'active' : ''} onClick={() => changeMode('source')}><FileCode2 size={14} />原文</button><button className={mode === 'preview' ? 'active' : ''} onClick={() => changeMode('preview')}><Eye size={14} />预览</button><button className={mode === 'split' ? 'active' : ''} onClick={() => changeMode('split')}><SplitSquareHorizontal size={14} />分屏</button></div><InlineError>{error}</InlineError></div>
-    <div className={`markdown-workspace mode-${mode}`}>
-      {mode !== 'preview' && <div className="markdown-editor"><Editor height="100%" language="markdown" value={content} onChange={(value) => { setContent(value ?? ''); setDirty((value ?? '') !== document.content); setStatus('idle') }} theme="vs-dark" options={{ minimap: { enabled: false }, fontSize: 14, fontFamily: 'Cascadia Code, Consolas, monospace', wordWrap: 'on', automaticLayout: true, scrollBeyondLastLine: false }} /></div>}
-      {mode !== 'source' && <MarkdownPreview sourceId={document.sourceId} documentPath={document.relativePath} content={content} />}
-    </div>
+    <div className="markdown-toolbar"><div className="segmented"><button className={mode === 'source' ? 'active' : ''} onClick={() => changeMode('source')}><FileCode2 size={14} />原文</button><button className={mode === 'preview' ? 'active' : ''} onClick={() => changeMode('preview')}><Eye size={14} />预览</button><button className={mode === 'split' ? 'active' : ''} onClick={() => changeMode('split')}><SplitSquareHorizontal size={14} />分屏</button></div>{mode !== 'source' && <ToolButton className={tocOpen ? 'active' : ''} disabled={!headingCount} aria-pressed={tocOpen} title={headingCount ? (tocOpen ? '收起文档目录' : '展开文档目录') : '当前文档没有标题'} onClick={toggleToc}><List size={14} />目录</ToolButton>}{mode === 'split' && <ToolButton className={syncScroll ? 'active' : ''} aria-pressed={syncScroll} onClick={toggleSyncScroll}>同步滚动</ToolButton>}<InlineError>{error}</InlineError></div>
+    <MarkdownWorkspace content={content} mode={mode} tocOpen={tocOpen} syncScroll={syncScroll} previewComponents={previewComponents} onHeadingCountChange={setHeadingCount} onChange={(value) => { setContent(value); setDirty(value !== document.content); setStatus('idle') }} />
   </div>
 }
 

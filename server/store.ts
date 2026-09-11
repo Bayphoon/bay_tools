@@ -288,7 +288,7 @@ export class BayToolsStore {
     await this.ensureJson(this.recentColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, recent: [] })
     await this.ensureJson(this.savedColorsPath, { schemaVersion: 1, updatedAt: now(), revision: 1, saved: [] })
     await this.ensureJson(this.markdownSourcesPath, { schemaVersion: 1, updatedAt: now(), revision: 1, sources: [] } satisfies MarkdownSourceFile)
-    await this.ensureJson(this.markdownUiPath, { schemaVersion: 1, updatedAt: now(), revision: 1, mode: 'split' } satisfies MarkdownUiState)
+    await this.ensureJson(this.markdownUiPath, { schemaVersion: 1, updatedAt: now(), revision: 1, mode: 'split', tocOpen: true, syncScroll: true } satisfies MarkdownUiState)
     await this.ensureJson(this.managedMarkdownIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, folders: [], documents: [] } satisfies ManagedMarkdownLibrary)
     await this.ensureJson(this.fileWorkbenchIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies FileWorkbenchLibrary)
     await this.ensureJson(this.trashIndexPath, { schemaVersion: 1, updatedAt: now(), revision: 1, items: [] } satisfies TrashIndex)
@@ -564,13 +564,21 @@ export class BayToolsStore {
   }
 
   async getMarkdownUiState(): Promise<MarkdownUiState> {
-    return readJson<MarkdownUiState>(this.markdownUiPath)
+    const value = await readJson<MarkdownUiState>(this.markdownUiPath)
+    return { ...value, tocOpen: value.tocOpen ?? true, syncScroll: value.syncScroll ?? true }
   }
 
   async updateMarkdownUiState(next: MarkdownUiState): Promise<MarkdownUiState> {
     const current = await this.getMarkdownUiState()
     if (current.revision !== next.revision) throw new ConflictError('Markdown 视图状态已在其他窗口中修改', current)
-    const value = { ...next, schemaVersion: 1 as const, revision: next.revision + 1, updatedAt: now() }
+    const value = {
+      ...next,
+      schemaVersion: 1 as const,
+      tocOpen: next.tocOpen ?? true,
+      syncScroll: next.syncScroll ?? true,
+      revision: next.revision + 1,
+      updatedAt: now(),
+    }
     await writeJson(this.markdownUiPath, value)
     return value
   }
