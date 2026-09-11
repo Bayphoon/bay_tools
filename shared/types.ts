@@ -131,6 +131,8 @@ export interface MarkdownUiState {
   updatedAt: string
   revision: number
   mode: 'source' | 'preview' | 'split'
+  tocOpen: boolean
+  syncScroll: boolean
 }
 
 export interface ManagedMarkdownFolder {

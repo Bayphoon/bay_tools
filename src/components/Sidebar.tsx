@@ -29,7 +29,7 @@ function MoveToFolderSubmenu({ folders, currentFolderId, onMove }: { folders: Ar
 function JsonWorkspaceRow({ workspace, folders, onChanged }: { workspace: JsonWorkspaceSummary; folders: JsonFolder[]; onChanged: () => Promise<void> }) {
   const navigate = useNavigate()
   return <div className="nav-child-wrap">
-    <NavLink className="nav-tree-row nav-file" to={`/json/${workspace.id}`}><span className="json-dot">{'{}'}</span><span>{workspace.title}</span></NavLink>
+    <NavLink className="nav-tree-row nav-file" to={`/json/${workspace.id}`}><span className="nav-child-dot" aria-hidden="true" /><span>{workspace.title}</span></NavLink>
     <Menu>{item('重命名', async () => {
       const title = window.prompt('工作区名称', workspace.title)
       if (!title || title === workspace.title) return
@@ -74,7 +74,7 @@ function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: st
     </button>
     {!collapsed[node.relativePath] && <MarkdownNodes sourceId={sourceId} nodes={node.children ?? []} onChanged={onChanged} depth={depth + 1} />}
   </div> : <div className="nav-child-wrap" key={node.relativePath}>
-    <NavLink className="nav-tree-row nav-file" style={{ paddingLeft: 34 + depth * 12 }} to={`/markdown/${sourceId}?path=${encodeURIComponent(node.relativePath)}`}><FileText size={13} /><span>{node.name}</span></NavLink>
+    <NavLink className="nav-tree-row nav-file" style={{ paddingLeft: 34 + depth * 12 }} to={`/markdown/${sourceId}?path=${encodeURIComponent(node.relativePath)}`}><span className="nav-child-dot" aria-hidden="true" /><span>{node.name}</span></NavLink>
     <Menu>{item('重命名', async () => {
       const document = await localBridge.getMarkdownDocument(sourceId, node.relativePath)
       const nextName = window.prompt('新的 Markdown 文件名', node.name)
@@ -96,7 +96,7 @@ function ManagedDocumentRow({ document, folders, onChanged }: { document: Manage
   const navigate = useNavigate()
   const location = useLocation()
   return <div className="nav-child-wrap">
-    <NavLink className="nav-tree-row nav-file" to={`/markdown/document/${document.id}`}><FileText size={13} /><span>{document.title}</span></NavLink>
+    <NavLink className="nav-tree-row nav-file" to={`/markdown/document/${document.id}`}><span className="nav-child-dot" aria-hidden="true" /><span>{document.title}</span></NavLink>
     <Menu>{item('重命名', async () => {
       const current = await localBridge.getManagedMarkdownDocument(document.id)
       const title = window.prompt('Markdown 文档名称', current.title)?.trim()
@@ -253,10 +253,10 @@ export function Sidebar() {
   return <aside className="sidebar">
     <div className="brand"><img className="brand-icon" src="/baytools-icon.png" alt="" /><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
     <nav className="nav-main">
-      <NavLink to="/" end className="nav-row"><Home size={16} /><span>主页</span></NavLink>
+      <NavLink to="/" end className="nav-row"><span className="nav-root-icon"><Home size={16} /></span><span>主页</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><Braces size={16} /><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><span className="nav-root-icon"><Braces size={16} /></span><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加 JSON 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 JSON', () => { void createWorkspace() })}{item('添加分组', () => { void createJsonFolder() })}</Menu>
         </div>
         {jsonOpen && <div className="nav-children">
@@ -266,7 +266,7 @@ export function Sidebar() {
       </div>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><FileText size={16} /><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加 Markdown 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空文档', () => { void createManagedDocument() })}{item('添加分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
         </div>
         {markdownOpen && <div className="nav-children">{managedMarkdown && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
@@ -286,17 +286,17 @@ export function Sidebar() {
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : <MarkdownNodes sourceId={source.id} nodes={source.children} onChanged={refreshMarkdown} />)}
         </div>})}</div>}
       </div>
-      <NavLink to="/files" className="nav-row"><Files size={16} /><span>文件工作台</span></NavLink>
-      <NavLink to="/timestamp" className="nav-row"><Clock3 size={16} /><span>Timestamp</span></NavLink>
-      <NavLink to="/color" className="nav-row"><Palette size={16} /><span>颜色格式转换</span></NavLink>
-      <NavLink to="/translation" className="nav-row"><MessageSquareText size={16} /><span>翻译</span></NavLink>
+      <NavLink to="/files" className="nav-row"><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
+      <NavLink to="/timestamp" className="nav-row"><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
+      <NavLink to="/color" className="nav-row"><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>
+      <NavLink to="/translation" className="nav-row"><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><Languages size={16} /><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><span className="nav-root-icon"><Languages size={16} /></span><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
         </div>
         {languageOpen && <div className="nav-children">{languageSources.map((source) => <div className="nav-child-wrap" key={source.id}>
-          <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><Languages size={13} /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
+          <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><span className="nav-child-dot" aria-hidden="true" /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
           <Menu>{item('删除语种', async () => {
             if (!window.confirm(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`)) return
             await localBridge.deleteLanguageSource(source.id)
@@ -309,11 +309,11 @@ export function Sidebar() {
           }, true)}</Menu>
         </div>)}</div>}
       </div>
-      <NavLink to="/server-status" className="nav-row"><Server size={16} /><span>服务器状态</span></NavLink>
+      <NavLink to="/server-status" className="nav-row"><span className="nav-root-icon"><Server size={16} /></span><span>服务器状态</span></NavLink>
     </nav>
     <div className="sidebar-bottom">
-      <NavLink to="/data-sync" className="nav-row"><CloudUpload size={16} /><span>数据同步</span></NavLink>
-      <NavLink to="/settings" className="nav-row"><Settings size={16} /><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink>
+      <NavLink to="/data-sync" className="nav-row"><span className="nav-root-icon"><CloudUpload size={16} /></span><span>数据同步</span></NavLink>
+      <NavLink to="/settings" className="nav-row"><span className="nav-root-icon"><Settings size={16} /></span><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink>
     </div>
   </aside>
 }
