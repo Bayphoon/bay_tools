@@ -1,5 +1,5 @@
 import { closeSync, existsSync, openSync } from 'node:fs'
-import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { appendFile, cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { dirname, join, resolve } from 'node:path'
@@ -172,6 +172,49 @@ async function stopExistingService(runId) {
   if (await listenerPid()) throw new Error('旧服务未能在限定时间内停止')
 }
 
+async function clearDirectoryContents(root) {
+  if (!existsSync(root)) return
+  for (const entry of await readdir(root)) {
+    await rm(join(root, entry), { recursive: true, force: true }).catch((error) => {
+      if (error?.code !== 'EPERM' && error?.code !== 'EACCES' && error?.code !== 'EBUSY') throw error
+    })
+  }
+}
+
+async function restoreBuildDirectory(backup, target) {
+  await mkdir(target, { recursive: true })
+  await clearDirectoryContents(target)
+  await cp(backup, target, { recursive: true, force: true })
+}
+
+export async function replaceBuildDirectory(source, target, backup) {
+  const hadTarget = existsSync(target)
+  if (hadTarget) {
+    try {
+      await cp(target, backup, { recursive: true, force: false, errorOnExist: true })
+    } catch (error) {
+      await rm(backup, { recursive: true, force: true })
+      throw error
+    }
+  }
+
+  try {
+    await mkdir(target, { recursive: true })
+    await clearDirectoryContents(target)
+    await cp(source, target, { recursive: true, force: true })
+  } catch (error) {
+    try {
+      if (hadTarget) await restoreBuildDirectory(backup, target)
+      else await rm(target, { recursive: true, force: true })
+    } catch (rollbackError) {
+      throw new Error(`构建目录更新失败，自动恢复也未完成：${error instanceof Error ? error.message : error}；恢复错误：${rollbackError instanceof Error ? rollbackError.message : rollbackError}`)
+    }
+    throw error
+  }
+  await rm(source, { recursive: true, force: true }).catch(() => undefined)
+  return hadTarget
+}
+
 async function promoteBuild(stageRoot, runId) {
   const backupRoot = join(stateRoot, `previous-build-${runId}`)
   const targets = ['dist', 'dist-server']
@@ -182,11 +225,8 @@ async function promoteBuild(stageRoot, runId) {
   try {
     for (const name of targets) {
       const current = join(projectRoot, name)
-      if (existsSync(current)) {
-        await rename(current, join(backupRoot, name))
-        backedUp.add(name)
-      }
-      await rename(join(stageRoot, name), current)
+      const backup = join(backupRoot, name)
+      if (await replaceBuildDirectory(join(stageRoot, name), current, backup)) backedUp.add(name)
       promoted.add(name)
     }
     await rm(stageRoot, { recursive: true, force: true })
@@ -195,8 +235,8 @@ async function promoteBuild(stageRoot, runId) {
     for (const name of targets) {
       const current = join(projectRoot, name)
       const backup = join(backupRoot, name)
-      if (promoted.has(name)) await rm(current, { recursive: true, force: true })
-      if (backedUp.has(name) && existsSync(backup)) await rename(backup, current)
+      if (backedUp.has(name) && existsSync(backup)) await restoreBuildDirectory(backup, current)
+      else if (promoted.has(name)) await rm(current, { recursive: true, force: true })
     }
     throw error
   }
@@ -205,9 +245,10 @@ async function promoteBuild(stageRoot, runId) {
 async function restorePreviousBuild(backupRoot) {
   if (!backupRoot || !existsSync(backupRoot)) return false
   for (const name of ['dist', 'dist-server']) {
-    await rm(join(projectRoot, name), { recursive: true, force: true })
+    const current = join(projectRoot, name)
     const backup = join(backupRoot, name)
-    if (existsSync(backup)) await rename(backup, join(projectRoot, name))
+    if (existsSync(backup)) await restoreBuildDirectory(backup, current)
+    else await rm(current, { recursive: true, force: true })
   }
   await rm(backupRoot, { recursive: true, force: true })
   return existsSync(join(projectRoot, 'dist-server', 'server', 'index.js'))
@@ -294,9 +335,14 @@ async function main() {
       ])
     }
     if (stageRoot && existsSync(stageRoot)) await rm(stageRoot, { recursive: true, force: true })
-    if (await restorePreviousBuild(backupRoot)) {
-      const restored = spawnService('restored-previous-build')
-      restored.unref()
+    const activeSession = await currentSession()
+    const restoredBuild = activeSession ? false : await restorePreviousBuild(backupRoot)
+    const canRestartExistingBuild = existsSync(join(projectRoot, 'dist-server', 'server', 'index.js'))
+    if (activeSession || restoredBuild || canRestartExistingBuild) {
+      if (!activeSession) {
+        const restored = spawnService('restored-previous-build')
+        restored.unref()
+      }
       await writeStatus(runId, 'rollback', message)
     } else {
       await writeStatus(runId, failureStage, message)

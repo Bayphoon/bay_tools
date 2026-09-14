@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, mkdir, open, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, open, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PERSONAL_DATA_GIT_FILE_LIMIT, PersonalDataManager } from './personalData.js'
+import { PERSONAL_DATA_GIT_FILE_LIMIT, PersonalDataManager, replaceDirectory } from './personalData.js'
 
 const execFileAsync = promisify(execFile)
 const roots: string[] = []
@@ -51,6 +51,32 @@ afterEach(async () => {
 })
 
 describe('PersonalDataManager', () => {
+  it('falls back to an in-place snapshot update when Windows blocks the directory rename', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baytools-personal-replace-'))
+    roots.push(root)
+    const stage = join(root, '.alice.tmp-test')
+    const target = join(root, 'alice')
+    await write(root, '.alice.tmp-test/settings.json', 'new settings')
+    await write(root, '.alice.tmp-test/json/current.json', 'current')
+    await write(root, 'alice/settings.json', 'old settings')
+    await write(root, 'alice/json/stale.json', 'stale')
+
+    const renameWithLockedTarget: typeof rename = async (source, destination) => {
+      if (source === target && String(destination).includes('.alice.bak-')) {
+        throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+      }
+      await rename(source, destination)
+    }
+
+    await replaceDirectory(stage, target, renameWithLockedTarget)
+
+    expect(await readFile(join(target, 'settings.json'), 'utf8')).toBe('new settings')
+    expect(await readFile(join(target, 'json/current.json'), 'utf8')).toBe('current')
+    await expect(access(join(target, 'json/stale.json'))).rejects.toThrow()
+    await expect(access(stage)).rejects.toThrow()
+    expect((await readdir(root)).filter((name) => name.includes('.bak-'))).toEqual([])
+  })
+
   it('disables snapshots outside user branches', async () => {
     const { root, manager } = await createRoot('main')
     await write(root, 'Doc/settings.json', '{"theme":"dark"}')
