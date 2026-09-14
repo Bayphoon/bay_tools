@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises'
+import { cp, copyFile, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { PersonalDataPublishResult, PersonalDataStatus, PersonalDataSyncResult, PersonalDataSyncState } from '../shared/types.js'
@@ -182,19 +182,138 @@ async function copySelected(sourceRoot: string, targetRoot: string): Promise<Dat
   return inspectData(targetRoot)
 }
 
-async function replaceDirectory(stage: string, target: string): Promise<void> {
-  const backup = `${target}.bak-${randomUUID()}`
-  const hadTarget = await exists(target)
+interface DirectoryTree {
+  directories: Set<string>
+  files: Set<string>
+}
+
+type RenamePath = typeof rename
+
+async function inspectDirectoryTree(root: string): Promise<DirectoryTree> {
+  const tree: DirectoryTree = { directories: new Set(), files: new Set() }
+  if (!(await exists(root))) return tree
+  await assertNotSymlink(root)
+
+  async function visit(relativePath: string): Promise<void> {
+    const directory = join(root, relativePath)
+    const entries = await readdir(directory, { withFileTypes: true })
+    for (const entry of entries) {
+      const child = join(relativePath, entry.name)
+      const absolutePath = join(root, child)
+      const information = await lstat(absolutePath)
+      if (information.isSymbolicLink()) {
+        throw new AppError(422, 'PERSONAL_DATA_SYMLINK', `个人数据中不允许符号链接：${child}`)
+      }
+      if (information.isDirectory()) {
+        tree.directories.add(child)
+        await visit(child)
+      } else if (information.isFile()) {
+        tree.files.add(child)
+      }
+    }
+  }
+
+  await visit('')
+  return tree
+}
+
+function pathDepth(path: string): number {
+  return path.split(/[\\/]/).length
+}
+
+async function atomicCopyFile(source: string, target: string): Promise<void> {
+  const temporary = `${target}.tmp-${randomUUID()}`
+  await mkdir(dirname(target), { recursive: true })
   try {
-    if (hadTarget) await rename(target, backup)
-    await rename(stage, target)
-    if (hadTarget) await rm(backup, { recursive: true, force: true })
+    await copyFile(source, temporary)
+    await rename(temporary, target)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+}
+
+async function mirrorDirectory(source: string, target: string): Promise<void> {
+  const [sourceTree, targetTree] = await Promise.all([
+    inspectDirectoryTree(source),
+    inspectDirectoryTree(target),
+  ])
+
+  for (const relativePath of [...targetTree.files].filter((path) => !sourceTree.files.has(path))) {
+    await rm(join(target, relativePath), { force: true })
+  }
+  for (const relativePath of [...targetTree.directories]
+    .filter((path) => !sourceTree.directories.has(path))
+    .sort((left, right) => pathDepth(right) - pathDepth(left))) {
+    await rm(join(target, relativePath), { recursive: true, force: true })
+  }
+
+  await mkdir(target, { recursive: true })
+  for (const relativePath of [...sourceTree.directories].sort((left, right) => pathDepth(left) - pathDepth(right))) {
+    await mkdir(join(target, relativePath), { recursive: true })
+  }
+  for (const relativePath of sourceTree.files) {
+    await atomicCopyFile(join(source, relativePath), join(target, relativePath))
+  }
+}
+
+function isBlockedDirectoryRename(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
+}
+
+async function replaceDirectoryInPlace(stage: string, target: string, backup: string, hadTarget: boolean): Promise<void> {
+  if (hadTarget) {
+    await inspectDirectoryTree(target)
+    await cp(target, backup, { recursive: true, force: false, errorOnExist: true })
+  }
+  try {
+    await mirrorDirectory(stage, target)
   } catch (error) {
-    if (await exists(target)) await rm(target, { recursive: true, force: true })
-    if (hadTarget && await exists(backup)) await rename(backup, target)
+    try {
+      if (hadTarget) await mirrorDirectory(backup, target)
+      else await rm(target, { recursive: true, force: true })
+    } catch (rollbackError) {
+      throw new AppError(500, 'PERSONAL_DATA_ROLLBACK_FAILED', '个人数据快照更新失败，自动恢复也未完成；旧快照备份已保留', {
+        backup,
+        cause: error instanceof Error ? error.message : String(error),
+        rollbackCause: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+      })
+    }
+    if (hadTarget) await rm(backup, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+  if (hadTarget) await rm(backup, { recursive: true, force: true }).catch(() => undefined)
+}
+
+export async function replaceDirectory(stage: string, target: string, renamePath: RenamePath = rename): Promise<void> {
+  const backup = join(dirname(target), `.${basename(target)}.bak-${randomUUID()}`)
+  const hadTarget = await exists(target)
+  let targetMoved = false
+  let stageMoved = false
+  try {
+    if (hadTarget) {
+      try {
+        await renamePath(target, backup)
+        targetMoved = true
+      } catch (error) {
+        if (!isBlockedDirectoryRename(error)) throw error
+        await replaceDirectoryInPlace(stage, target, backup, true)
+        return
+      }
+    }
+    await renamePath(stage, target)
+    stageMoved = true
+  } catch (error) {
+    if (targetMoved && !stageMoved && await exists(backup) && !(await exists(target))) {
+      await renamePath(backup, target)
+      targetMoved = false
+    }
     throw error
   } finally {
     if (await exists(stage)) await rm(stage, { recursive: true, force: true })
+    if (stageMoved && targetMoved && await exists(backup)) {
+      await rm(backup, { recursive: true, force: true }).catch(() => undefined)
+    }
   }
 }
 
