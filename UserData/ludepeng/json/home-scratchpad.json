@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-05T13:59:25.399Z",
-  "revision": 13,
-  "text": "{\n  \"kingName\": \"13周淑英436\",\n  \"kingAbbr\": \"shep\",\n  \"actType\": 1,\n  \"_id\": 180,\n  \"list\": [\n    {\n      \"toUid\": \"178771624517413\",\n      \"name\": \"我是13国王\",\n      \"presentId\": 10001,\n      \"abbr\": \"shep\",\n      \"sendTime\": 1788362382109\n    },\n    {\n      \"toUid\": \"7039035670000013\",\n      \"name\": \"7039035670\",\n      \"presentId\": 10002,\n      \"abbr\": \"shep\",\n      \"sendTime\": 1788362427068\n    }\n  ],\n  \"kingUid\": \"178781917021613\",\n  \"_time\": 0\n}",
+  "updatedAt": "2026-09-10T10:31:03.594Z",
+  "revision": 24,
+  "text": "{\n  \"lotteryHero\": [\n    {\n      \"addNumber\": 1,\n      \"type\": 2,\n      \"GoodsId\": \"2270037\"\n    },\n    {\n      \"addNumber\": 10,\n      \"type\": 2,\n      \"GoodsId\": \"2270013\",\n      \"fromHero\": \"40008\"\n    },\n    {\n      \"addNumber\": 10,\n      \"type\": 2,\n      \"GoodsId\": \"2270038\",\n      \"fromHero\": \"30005\"\n    },\n    {\n      \"addNumber\": 1,\n      \"type\": 2,\n      \"GoodsId\": \"520001\"\n    },\n    {\n      \"addNumber\": 1,\n      \"type\": 2,\n      \"GoodsId\": \"400502\"\n    },\n    {\n      \"num\": 20,\n      \"id\": \"6001\",\n      \"type\": 5\n    },\n    {\n      \"addNumber\": 1,\n      \"type\": 2,\n      \"GoodsId\": \"520001\"\n    },\n    {\n      \"num\": 50000,\n      \"id\": \"8001\",\n      \"type\": 5\n    },\n    {\n      \"addNumber\": 5,\n      \"type\": 2,\n      \"GoodsId\": \"400502\"\n    },\n    {\n      \"num\": 10000,\n      \"id\": \"8001\",\n      \"type\": 5\n    }\n  ],\n  \"pityCurProtectNum\": 21,\n  \"pityProProtectNum\": 0,\n  \"pityMaxProtectNum\": 50,\n  \"dailyFreeNextFreshTime\": 85200,\n  \"pityType\": 5,\n  \"isTen\": 1,\n  \"dailyFreeLimit\": 1,\n  \"dailyFree\": 0,\n  \"pityProType\": 0,\n  \"id\": \"221703\",\n  \"_id\": 135,\n  \"totalLottery\": 10,\n  \"pityProNum\": 0,\n  \"_time\": 456,\n  \"pityLeftProtectNum\": 29\n}",
   "mode": "text",
   "autoFormat": true
 }

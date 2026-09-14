@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "id": "7af44d37-612e-4ff9-8138-9b5f70c8d517",
+  "title": "发放奖励",
+  "createdAt": "2026-09-09T11:04:20.516Z",
+  "updatedAt": "2026-09-09T11:04:41.598Z",
+  "revision": 7,
+  "panes": [
+    {
+      "id": "08a23add-4608-4822-8cb3-21e3eea454ee",
+      "title": "JSON 1",
+      "text": "{\n  \"targetServerId\": 13,\n  \"cfgId\": 10001,\n  \"targetUid\": \"7039035670000013\",\n  \"_id\": 170\n}",
+      "view": "text"
+    },
+    {
+      "id": "abcc4e67-af00-435a-afab-bf628f8aa111",
+      "title": "JSON 2",
+      "text": "{\n  \"kingdomFund\": 7199893819,\n  \"success\": true,\n  \"_id\": 170,\n  \"targetUid\": \"7039035670000013\",\n  \"cfgId\": 10001,\n  \"_time\": 35\n}",
+      "view": "text"
+    }
+  ],
+  "diffSelection": {
+    "basePaneId": "08a23add-4608-4822-8cb3-21e3eea454ee",
+    "targetPaneId": "abcc4e67-af00-435a-afab-bf628f8aa111"
+  }
+}
