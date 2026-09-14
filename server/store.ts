@@ -1,4 +1,5 @@
 import {
+  cp,
   copyFile,
   lstat,
   mkdir,
@@ -117,6 +118,43 @@ async function hashFile(path: string): Promise<string> {
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer)
   return hash.digest('hex')
+}
+
+function isBlockedDirectoryRename(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
+}
+
+export async function moveDirectoryWithVerifiedFile(
+  source: string,
+  target: string,
+  relativeFile: string,
+  expectedHash: string,
+  renamePath: typeof rename = rename,
+): Promise<void> {
+  try {
+    await renamePath(source, target)
+    return
+  } catch (error) {
+    if (!isBlockedDirectoryRename(error) || await exists(target)) throw error
+  }
+
+  const sourceFile = join(source, relativeFile)
+  const targetFile = join(target, relativeFile)
+  try {
+    await cp(source, target, { recursive: true, force: false, errorOnExist: true })
+    if (await hashFile(targetFile) !== expectedHash) {
+      throw new AppError(500, 'TRASH_VERIFY_FAILED', '复制到垃圾箱后的文件校验失败')
+    }
+    await rm(sourceFile, { force: true, maxRetries: 10, retryDelay: 100 })
+    if (await exists(sourceFile)) throw new AppError(500, 'SOURCE_DELETE_FAILED', '源文件仍被占用，无法完成删除')
+  } catch (error) {
+    await rm(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined)
+    throw error
+  }
+
+  // Windows 文件监控器可能暂时占用空目录；核心文件已校验复制并删除后，残留空目录不影响垃圾箱事务。
+  await rm(source, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }).catch(() => undefined)
 }
 
 function createJsonPane(title: string, text = '{\n  \n}', view: JsonViewMode = 'text'): JsonPane {
@@ -1019,8 +1057,9 @@ export class BayToolsStore {
     const library = await this.listFileWorkbenchItems()
     const trashId = randomUUID()
     const trashRoot = join(this.trashItemsRoot, trashId)
+    const payload = join(trashRoot, 'payload')
+    const sourceRoot = this.fileWorkbenchItemRoot(id)
     await mkdir(trashRoot, { recursive: true })
-    await rename(this.fileWorkbenchItemRoot(id), join(trashRoot, 'payload'))
     const trashItem: TrashItem = {
       id: trashId,
       kind: 'file-workbench',
@@ -1032,6 +1071,12 @@ export class BayToolsStore {
       sha256: item.sha256,
     }
     await writeJson(join(trashRoot, 'metadata.json'), trashItem)
+    try {
+      await moveDirectoryWithVerifiedFile(sourceRoot, payload, join('content', validateFileWorkbenchName(item.name)), item.sha256)
+    } catch (error) {
+      await rm(trashRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }).catch(() => undefined)
+      throw error
+    }
     library.items = library.items.filter((value) => value.id !== id)
     library.revision += 1
     library.updatedAt = now()
@@ -1095,7 +1140,7 @@ export class BayToolsStore {
         restored = { ...restored, id: randomUUID(), name: `${basename(restored.name, restored.extension)}（已恢复）${restored.extension}`, createdAt: now(), updatedAt: now(), metadataRevision: 1 }
         targetRoot = this.fileWorkbenchItemRoot(restored.id)
       }
-      await rename(payload, targetRoot)
+      await moveDirectoryWithVerifiedFile(payload, targetRoot, join('content', validateFileWorkbenchName(item.fileWorkbenchItem.name)), item.sha256)
       if (restored.id !== item.fileWorkbenchItem.id || restored.name !== item.fileWorkbenchItem.name) {
         await rename(join(targetRoot, 'content', item.fileWorkbenchItem.name), join(targetRoot, 'content', restored.name))
       }

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { randomUUID } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { access, mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
-import { BayToolsStore, getFileWorkbenchPreviewKind, validateFileWorkbenchName } from './store.js'
+import { BayToolsStore, getFileWorkbenchPreviewKind, moveDirectoryWithVerifiedFile, validateFileWorkbenchName } from './store.js'
 import { ConflictError } from './errors.js'
 
 describe('BayToolsStore', () => {
@@ -232,6 +232,29 @@ describe('BayToolsStore', () => {
     const restored = await store.restoreTrash(trash.id)
     expect(restored.fileWorkbenchId).toBe(item.id)
     expect((await store.getFileWorkbenchText(item.id)).content).toBe('第二版')
+  })
+
+  it('copies, verifies, and removes a workbench item when Windows blocks the directory rename', async () => {
+    const source = join(root, 'locked-item')
+    const target = join(root, 'trash-payload')
+    const content = Buffer.from('clipboard image bytes')
+    await mkdir(join(source, 'content'), { recursive: true })
+    await writeFile(join(source, 'content', 'clipboard.png'), content)
+    await writeFile(join(source, 'metadata.json'), '{}')
+    const blockedRename: typeof rename = async () => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' })
+    }
+
+    await moveDirectoryWithVerifiedFile(
+      source,
+      target,
+      join('content', 'clipboard.png'),
+      createHash('sha256').update(content).digest('hex'),
+      blockedRename,
+    )
+
+    expect(await readFile(join(target, 'content', 'clipboard.png'))).toEqual(content)
+    await expect(access(join(source, 'content', 'clipboard.png'))).rejects.toThrow()
   })
 
   it('rejects unsafe workbench names and classifies supported previews', () => {
