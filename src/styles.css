@@ -31,7 +31,7 @@ a { color: inherit; text-decoration: none; }
 .mono, code, pre, textarea { font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace; }
 
 .app-shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); width: 100%; height: 100%; background: var(--bg); }
-.sidebar { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 90%, var(--bg)); }
+.sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; overflow: hidden; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 90%, var(--bg)); }
 .brand { height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); }
 .brand-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--accent); color: var(--accent-contrast); font-size: 17px; font-weight: 900; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 24%, transparent); }
 .brand-mark.large { width: 54px; height: 54px; font-size: 27px; border-radius: 14px; }
@@ -40,8 +40,8 @@ a { color: inherit; text-decoration: none; }
 .brand > div:last-child { display: flex; flex-direction: column; line-height: 1.1; }
 .brand strong { font-size: 16px; letter-spacing: .02em; }
 .brand span { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
-.nav-main { flex: 1; padding: 10px 7px; overflow: auto; }
-.sidebar-bottom { padding: 8px 7px; border-top: 1px solid var(--border); }
+.nav-main { flex: 1 1 auto; min-height: 0; padding: 10px 7px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.sidebar-bottom { flex: 0 0 auto; padding: 8px 7px; border-top: 1px solid var(--border); }
 .nav-row, .nav-parent > button:first-child, .nav-tree-row, .source-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; border: 0; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
 .nav-row { height: 38px; margin: 2px 0; padding: 0 7px; border-radius: 6px; font-size: 13px; font-weight: 650; }
 .nav-row:hover, .nav-row.active { background: var(--surface-hover); color: var(--text); }
