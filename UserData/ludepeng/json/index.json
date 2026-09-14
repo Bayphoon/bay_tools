@@ -1,19 +1,21 @@
 {
   "schemaVersion": 2,
-  "updatedAt": "2026-09-11T02:26:08.948Z",
-  "revision": 168,
+  "updatedAt": "2026-09-14T06:04:25.552Z",
+  "revision": 177,
   "items": [
     {
       "id": "15cc9225-367c-41ef-84e0-de9d17fd418f",
       "title": "Rule Info",
       "createdAt": "2026-09-01T05:00:49.910Z",
-      "updatedAt": "2026-09-03T06:11:12.472Z"
+      "updatedAt": "2026-09-14T06:04:19.934Z",
+      "folderId": "f8fcb832-6858-4379-9927-26f97e82b306"
     },
     {
       "id": "daa36fa4-a77c-4121-a881-ea16927217a5",
       "title": "Rule Edit",
       "createdAt": "2026-09-01T06:46:22.995Z",
-      "updatedAt": "2026-09-02T03:33:46.040Z"
+      "updatedAt": "2026-09-14T06:04:21.879Z",
+      "folderId": "f8fcb832-6858-4379-9927-26f97e82b306"
     },
     {
       "id": "a8bae1c3-53f6-4e2b-8587-9fc9f637e937",
@@ -25,7 +27,8 @@
       "id": "d3c4fcc5-6014-44c1-a1aa-c58b6f2881da",
       "title": "违法排行",
       "createdAt": "2026-09-01T10:34:00.167Z",
-      "updatedAt": "2026-09-01T10:34:10.145Z"
+      "updatedAt": "2026-09-14T06:04:25.552Z",
+      "folderId": "f8fcb832-6858-4379-9927-26f97e82b306"
     },
     {
       "id": "7af44d37-612e-4ff9-8138-9b5f70c8d517",
@@ -36,9 +39,9 @@
     },
     {
       "id": "27cbf2a8-dfc2-4e17-a0ce-98fe404a27c2",
-      "title": "未命名 JSON",
+      "title": "英雄抽卡",
       "createdAt": "2026-09-10T10:31:36.591Z",
-      "updatedAt": "2026-09-11T02:26:08.945Z"
+      "updatedAt": "2026-09-11T03:00:21.272Z"
     }
   ],
   "folders": [
@@ -47,6 +50,12 @@
       "name": "国王嘉奖",
       "createdAt": "2026-09-09T11:04:17.855Z",
       "updatedAt": "2026-09-09T11:04:17.855Z"
+    },
+    {
+      "id": "f8fcb832-6858-4379-9927-26f97e82b306",
+      "name": "国王法令",
+      "createdAt": "2026-09-14T06:04:15.793Z",
+      "updatedAt": "2026-09-14T06:04:15.793Z"
     }
   ]
 }
