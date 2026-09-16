@@ -1,10 +1,11 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, Files, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import type { JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import type { FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
 import { copyFilePath } from '../lib/clipboard'
 import { localBridge } from '../lib/api'
+import { inferDocumentPreviewKind, isScannedDocumentActive } from '../lib/documentTypes'
 import { useAppStore } from '../store/appStore'
 
 function Menu({ children, triggerLabel = '更多操作', triggerIcon, alwaysVisible = false }: { children: React.ReactNode; triggerLabel?: string; triggerIcon?: React.ReactNode; alwaysVisible?: boolean }) {
@@ -15,6 +16,29 @@ function Menu({ children, triggerLabel = '更多操作', triggerIcon, alwaysVisi
 }
 
 const item = (label: string, action: () => void, danger = false) => <DropdownMenu.Item className={`dropdown-item ${danger ? 'danger' : ''}`} onSelect={action}>{label}</DropdownMenu.Item>
+
+type DocumentFilter = 'all' | FileWorkbenchPreviewKind
+
+function documentKind(node: MarkdownTreeNode): FileWorkbenchPreviewKind {
+  return node.previewKind ?? inferDocumentPreviewKind(node.name)
+}
+
+function filterDocumentNodes(nodes: MarkdownTreeNode[], filter: DocumentFilter): MarkdownTreeNode[] {
+  if (filter === 'all') return nodes
+  return nodes.flatMap((node) => {
+    if (node.type === 'file') return documentKind(node) === filter ? [node] : []
+    const children = filterDocumentNodes(node.children ?? [], filter)
+    return children.length ? [{ ...node, children }] : []
+  })
+}
+
+function DocumentNodeIcon({ node }: { node: MarkdownTreeNode }) {
+  const kind = documentKind(node)
+  if (kind === 'image') return <FileImage size={13} />
+  if (kind === 'text' || kind === 'markdown') return <FileCode2 size={13} />
+  if (kind === 'pdf') return <FileText size={13} />
+  return <File size={13} />
+}
 
 function MoveToFolderSubmenu({ folders, currentFolderId, onMove }: { folders: Array<{ id: string; name: string }>; currentFolderId?: string; onMove: (folderId?: string) => void }) {
   return <DropdownMenu.Sub>
@@ -65,19 +89,20 @@ function JsonFolderSection({ folder, folders, workspaces, onCreate, onChanged }:
   </div>
 }
 
-function MarkdownNodes({ sourceId, nodes, onChanged, depth = 0 }: { sourceId: string; nodes: MarkdownTreeNode[]; onChanged: () => Promise<void>; depth?: number }) {
+function MarkdownNodes({ sourceId, nodes, onChanged, onCreate, depth = 0 }: { sourceId: string; nodes: MarkdownTreeNode[]; onChanged: () => Promise<void>; onCreate: (relativeDirectory: string) => Promise<void>; depth?: number }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const navigate = useNavigate()
+  const location = useLocation()
   return <>{nodes.map((node) => node.type === 'directory' ? <div key={node.relativePath}>
-    <button className="nav-tree-row" style={{ paddingLeft: 18 + depth * 12 }} onClick={() => setCollapsed((value) => ({ ...value, [node.relativePath]: !value[node.relativePath] }))}>
+    <div className="nav-child-wrap document-directory-wrap"><button className="nav-tree-row" style={{ paddingLeft: 18 + depth * 12 }} onClick={() => setCollapsed((value) => ({ ...value, [node.relativePath]: !value[node.relativePath] }))}>
       {collapsed[node.relativePath] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={13} /><span>{node.name}</span>
-    </button>
-    {!collapsed[node.relativePath] && <MarkdownNodes sourceId={sourceId} nodes={node.children ?? []} onChanged={onChanged} depth={depth + 1} />}
+    </button><Menu>{item('在此目录新建文件', () => { void onCreate(node.relativePath) })}</Menu></div>
+    {!collapsed[node.relativePath] && <MarkdownNodes sourceId={sourceId} nodes={node.children ?? []} onChanged={onChanged} onCreate={onCreate} depth={depth + 1} />}
   </div> : <div className="nav-child-wrap" key={node.relativePath}>
-    <NavLink className="nav-tree-row nav-file" style={{ paddingLeft: 34 + depth * 12 }} to={`/markdown/${sourceId}?path=${encodeURIComponent(node.relativePath)}`}><span className="nav-child-dot" aria-hidden="true" /><span>{node.name}</span></NavLink>
+    <Link className={`nav-tree-row nav-file document-file-row ${isScannedDocumentActive(location.pathname, location.search, sourceId, node.relativePath) ? 'active' : ''}`} aria-current={isScannedDocumentActive(location.pathname, location.search, sourceId, node.relativePath) ? 'page' : undefined} style={{ paddingLeft: 34 + depth * 12 }} to={`/markdown/${sourceId}?path=${encodeURIComponent(node.relativePath)}`}><DocumentNodeIcon node={node} /><span>{node.name}</span></Link>
     <Menu>{item('重命名', async () => {
       const document = await localBridge.getMarkdownDocument(sourceId, node.relativePath)
-      const nextName = window.prompt('新的 Markdown 文件名', node.name)
+      const nextName = window.prompt('新的文件名（不能修改扩展名）', node.name)
       if (!nextName || nextName === node.name) return
       const renamed = await localBridge.renameMarkdownDocument(sourceId, node.relativePath, nextName, document.hash)
       await onChanged()
@@ -155,6 +180,7 @@ export function Sidebar() {
   const [jsonOpen, setJsonOpen] = useState(!settings?.sidebar.collapsedGroups.includes('json'))
   const [languageOpen, setLanguageOpen] = useState(!settings?.sidebar.collapsedGroups.includes('language'))
   const [markdownOpen, setMarkdownOpen] = useState(!settings?.sidebar.collapsedGroups.includes('markdown'))
+  const [documentFilter, setDocumentFilter] = useState<DocumentFilter>('all')
   const jsonActive = location.pathname === '/json' || location.pathname.startsWith('/json/')
   const languageActive = location.pathname === '/language' || location.pathname.startsWith('/language/')
   const markdownActive = location.pathname === '/markdown' || location.pathname.startsWith('/markdown/')
@@ -240,6 +266,19 @@ export function Sidebar() {
     await refreshManagedMarkdown()
   }
 
+  const createScannedDocument = async (sourceId: string, relativeDirectory = '') => {
+    const name = window.prompt('新文件名（支持 Markdown、文本和代码文件）', '未命名文档.md')?.trim()
+    if (!name) return
+    try {
+      const document = await localBridge.createMarkdownDocument(sourceId, relativeDirectory, name)
+      setDocumentFilter('all')
+      await refreshMarkdown()
+      navigate(`/markdown/${sourceId}?path=${encodeURIComponent(document.relativePath)}`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '新建文件失败')
+    }
+  }
+
   const toggleMarkdownSource = (sourceId: string) => {
     if (!settings) return
     const key = `markdown-source:${sourceId}`
@@ -266,14 +305,15 @@ export function Sidebar() {
       </div>
       <div className="nav-group">
         <div className="nav-parent">
-          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>Markdown</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
-          <Menu triggerLabel="添加 Markdown 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空文档', () => { void createManagedDocument() })}{item('添加分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
+          <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>文档</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <Menu triggerLabel="添加文档内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 Markdown', () => { void createManagedDocument() })}{item('添加分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
         </div>
-        {markdownOpen && <div className="nav-children">{managedMarkdown && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
+        {markdownOpen && <div className="nav-children"><div className="document-filter" aria-label="按文件类型筛选">{([['all', '全部'], ['markdown', 'MD'], ['text', '文本'], ['image', '图片'], ['pdf', 'PDF'], ['binary', '其他']] as const).map(([value, label]) => <button key={value} className={documentFilter === value ? 'active' : ''} onClick={() => setDocumentFilter(value)}>{label}</button>)}</div>{managedMarkdown && (documentFilter === 'all' || documentFilter === 'markdown') && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
           const collapsed = settings?.sidebar.collapsedGroups.includes(`markdown-source:${source.id}`) ?? false
           const displayName = source.note?.trim() || source.label
+          const visibleNodes = filterDocumentNodes(source.children, documentFilter)
           return <div className="source-tree" key={source.id}>
-          <div className="source-title"><button className="source-toggle" aria-expanded={!collapsed} onClick={() => toggleMarkdownSource(source.id)}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}<span title={source.path}>{displayName}</span></button><Menu>{item('修改备注名', async () => {
+          <div className="source-title"><button className="source-toggle" aria-expanded={!collapsed} onClick={() => toggleMarkdownSource(source.id)}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}<span title={source.path}>{displayName}</span></button><Menu>{item('新建文件', () => { void createScannedDocument(source.id) })}{item('修改备注名', async () => {
             const note = window.prompt('扫描目录备注名，留空则显示文件夹名', source.note ?? '')
             if (note === null) return
             await localBridge.updateMarkdownSourceNote(source.id, note)
@@ -283,7 +323,7 @@ export function Sidebar() {
             await localBridge.removeMarkdownSource(source.id)
             await refreshMarkdown()
           }, true)}</Menu></div>
-          {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : <MarkdownNodes sourceId={source.id} nodes={source.children} onChanged={refreshMarkdown} />)}
+          {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : visibleNodes.length ? <MarkdownNodes sourceId={source.id} nodes={visibleNodes} onChanged={refreshMarkdown} onCreate={(relativeDirectory) => createScannedDocument(source.id, relativeDirectory)} /> : <div className="source-empty">当前筛选下没有文件</div>)}
         </div>})}</div>}
       </div>
       <NavLink to="/files" className="nav-row"><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>

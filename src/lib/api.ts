@@ -158,6 +158,7 @@ export const localBridge: LocalBridge = {
   removeMarkdownSource: (id) => request<void>(`/api/markdown/sources/${id}`, { method: 'DELETE' }),
   revealMarkdownSource: (id) => request<void>(`/api/markdown/sources/${id}/reveal`, { method: 'POST', body: '{}' }),
   scanMarkdownSources: () => request<MarkdownSourceTree[]>('/api/markdown/tree'),
+  createMarkdownDocument: (sourceId, relativeDirectory, name) => request<MarkdownDocument>('/api/markdown/document/create', { method: 'POST', body: JSON.stringify({ sourceId, relativeDirectory, name }) }),
   getMarkdownDocument: (sourceId, relativePath) => request<MarkdownDocument>(`/api/markdown/document?${query({ sourceId, path: relativePath })}`),
   saveMarkdownDocument: (document) => request<MarkdownDocument>('/api/markdown/document', { method: 'PUT', body: JSON.stringify(document) }),
   renameMarkdownDocument: (sourceId, relativePath, nextName, hash) => request<MarkdownDocument>('/api/markdown/document/rename', { method: 'POST', body: JSON.stringify({ sourceId, path: relativePath, nextName, hash }) }),
@@ -204,6 +205,15 @@ export const localBridge: LocalBridge = {
 
 export function fileWorkbenchContentUrl(id: string, download = false): string {
   return `/api/file-workbench/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`
+}
+
+export function scannedDocumentContentUrl(sourceId: string, relativePath: string, download = false): string {
+  return `/api/markdown/content?${query({ sourceId, path: relativePath, ...(download ? { download: '1' } : {}) })}`
+}
+
+export function scannedDocumentResourceBaseUrl(sourceId: string, relativePath: string): string {
+  const directory = relativePath.replaceAll('\\', '/').split('/').slice(0, -1).filter(Boolean).map(encodeURIComponent).join('/')
+  return `/api/markdown/resource/${encodeURIComponent(sourceId)}/${directory ? `${directory}/` : ''}`
 }
 
 export async function assetUrl(sourceId: string, relativePath: string): Promise<string> {

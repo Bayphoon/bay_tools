@@ -111,6 +111,10 @@ export interface MarkdownTreeNode {
   relativePath: string
   type: 'directory' | 'file'
   children?: MarkdownTreeNode[]
+  extension?: string
+  previewKind?: FileWorkbenchPreviewKind
+  size?: number
+  updatedAt?: string
 }
 
 export interface MarkdownSourceTree extends MarkdownSource {
@@ -124,6 +128,10 @@ export interface MarkdownDocument {
   content: string
   hash: string
   updatedAt: string
+  extension: string
+  previewKind: FileWorkbenchPreviewKind
+  size: number
+  editable: boolean
 }
 
 export interface MarkdownUiState {
@@ -262,7 +270,7 @@ export interface FileWorkbenchMetadataPatch {
   metadataRevision: number
 }
 
-export type TrashKind = 'markdown' | 'managed-markdown' | 'json-workspace' | 'file-workbench'
+export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench'
 
 export interface TrashItem {
   id: string
@@ -371,6 +379,7 @@ export interface LocalBridge {
   removeMarkdownSource(id: string): Promise<void>
   revealMarkdownSource(id: string): Promise<void>
   scanMarkdownSources(): Promise<MarkdownSourceTree[]>
+  createMarkdownDocument(sourceId: string, relativeDirectory: string, name: string): Promise<MarkdownDocument>
   getMarkdownDocument(sourceId: string, relativePath: string): Promise<MarkdownDocument>
   saveMarkdownDocument(document: MarkdownDocument): Promise<MarkdownDocument>
   renameMarkdownDocument(sourceId: string, relativePath: string, nextName: string, hash: string): Promise<MarkdownDocument>

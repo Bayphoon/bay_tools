@@ -142,6 +142,45 @@ describe('BayToolsStore', () => {
     expect(await readFile(join(docs, 'guide', 'readme.md'), 'utf8')).toBe('# Updated')
   })
 
+  it('scans multiple document types and only loads supported text into the editor', async () => {
+    const docs = join(root, 'mixed-docs')
+    await mkdir(docs)
+    await writeFile(join(docs, 'notes.txt'), 'hello', 'utf8')
+    await writeFile(join(docs, 'config.json'), '{"ok":true}', 'utf8')
+    await writeFile(join(docs, 'picture.png'), Buffer.from([137, 80, 78, 71]))
+    await writeFile(join(docs, 'manual.pdf'), Buffer.from('%PDF-1.4'))
+    await writeFile(join(docs, 'archive.zip'), Buffer.from([80, 75, 3, 4]))
+    const source = await store.addMarkdownSource(docs)
+
+    const tree = await store.scanMarkdownSources()
+    const files = tree[0]!.children.filter((node) => node.type === 'file')
+    expect(files.map((node) => [node.name, node.previewKind])).toEqual([
+      ['archive.zip', 'binary'],
+      ['config.json', 'text'],
+      ['manual.pdf', 'pdf'],
+      ['notes.txt', 'text'],
+      ['picture.png', 'image'],
+    ])
+
+    const created = await store.createMarkdownDocument(source.id, '', 'scratch.lua')
+    expect(created).toMatchObject({ relativePath: 'scratch.lua', content: '', editable: true, extension: '.lua', previewKind: 'text' })
+    await expect(store.createMarkdownDocument(source.id, '', 'scratch.lua')).rejects.toMatchObject({ code: 'NAME_CONFLICT' })
+    await expect(store.createMarkdownDocument(source.id, '', 'empty.png')).rejects.toMatchObject({ code: 'INVALID_DOCUMENT_TYPE' })
+
+    const text = await store.getMarkdownDocument(source.id, 'notes.txt')
+    expect(text).toMatchObject({ content: 'hello', editable: true, extension: '.txt', previewKind: 'text' })
+    const saved = await store.saveMarkdownDocument({ ...text, content: 'updated' })
+    expect(await readFile(join(docs, 'notes.txt'), 'utf8')).toBe('updated')
+
+    const image = await store.getMarkdownDocument(source.id, 'picture.png')
+    expect(image).toMatchObject({ content: '', editable: false, extension: '.png', previewKind: 'image' })
+    await expect(store.saveMarkdownDocument({ ...image, content: 'bad' })).rejects.toMatchObject({ code: 'DOCUMENT_READ_ONLY' })
+
+    const renamed = await store.renameMarkdownDocument(source.id, saved.relativePath, 'memo.txt', saved.hash)
+    expect(renamed.relativePath).toBe('memo.txt')
+    await expect(store.renameMarkdownDocument(source.id, renamed.relativePath, 'memo.md', renamed.hash)).rejects.toMatchObject({ code: 'INVALID_EXTENSION' })
+  })
+
   it('migrates and persists Markdown table-of-contents preferences', async () => {
     const statePath = join(root, 'Doc', 'markdown', 'ui-state.json')
     const legacy = await store.getMarkdownUiState()
