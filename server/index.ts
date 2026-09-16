@@ -2,8 +2,8 @@ import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
 import { randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { join } from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
@@ -174,7 +174,11 @@ app.get<{ Params: { id: string } }>('/api/file-workbench/:id/location', async (r
 const workbenchMimeTypes: Record<string, string> = {
   '.txt': 'text/plain; charset=utf-8', '.log': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.json': 'application/json; charset=utf-8',
   '.csv': 'text/csv; charset=utf-8', '.xml': 'application/xml; charset=utf-8', '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+  '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp', '.lua': 'text/plain; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8', '.jsx': 'text/javascript; charset=utf-8', '.ts': 'text/plain; charset=utf-8', '.tsx': 'text/plain; charset=utf-8',
+  '.html': 'text/html; charset=utf-8', '.htm': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
+  '.yaml': 'text/yaml; charset=utf-8', '.yml': 'text/yaml; charset=utf-8', '.ini': 'text/plain; charset=utf-8', '.cfg': 'text/plain; charset=utf-8',
+  '.sql': 'text/plain; charset=utf-8', '.py': 'text/plain; charset=utf-8', '.java': 'text/plain; charset=utf-8', '.cs': 'text/plain; charset=utf-8',
 }
 app.get<{ Params: { id: string }; Querystring: { download?: string } }>('/api/file-workbench/:id/content', async (request, reply) => {
   const item = await store.getFileWorkbenchItem(request.params.id)
@@ -248,6 +252,9 @@ app.post<{ Params: { id: string } }>('/api/markdown/sources/:id/reveal', async (
   return reply.status(204).send()
 })
 app.get('/api/markdown/tree', async () => store.scanMarkdownSources())
+app.post<{ Body: { sourceId: string; relativeDirectory?: string; name: string } }>('/api/markdown/document/create', async (request) => {
+  return store.createMarkdownDocument(request.body.sourceId, request.body.relativeDirectory ?? '', request.body.name)
+})
 app.get<{ Querystring: { sourceId: string; path: string } }>('/api/markdown/document', async (request) => store.getMarkdownDocument(request.query.sourceId, request.query.path))
 app.put<{ Body: MarkdownDocument }>('/api/markdown/document', async (request) => store.saveMarkdownDocument(request.body))
 app.post<{ Body: { sourceId: string; path: string; nextName: string; hash: string } }>('/api/markdown/document/rename', async (request) => {
@@ -263,6 +270,42 @@ app.post<{ Body: { sourceId: string; path: string } }>('/api/markdown/document/r
   return reply.status(204).send()
 })
 app.get<{ Querystring: { sourceId: string; path: string } }>('/api/markdown/document/location', async (request) => ({ path: await store.getMarkdownDocumentLocation(request.query.sourceId, request.query.path) }))
+app.get<{ Querystring: { sourceId: string; path: string; download?: string } }>('/api/markdown/content', async (request, reply) => {
+  const path = await store.getMarkdownDocumentLocation(request.query.sourceId, request.query.path)
+  const info = await stat(path)
+  const name = basename(path)
+  const disposition = request.query.download === '1' ? 'attachment' : 'inline'
+  reply.header('x-content-type-options', 'nosniff')
+  reply.header('cache-control', 'no-store')
+  reply.header('accept-ranges', 'bytes')
+  reply.header('content-disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`)
+  reply.type(workbenchMimeTypes[extname(name).toLowerCase()] ?? 'application/octet-stream')
+  let range
+  try { range = parseSingleByteRange(request.headers.range, info.size) } catch (error) {
+    reply.header('content-range', `bytes */${info.size}`)
+    throw error
+  }
+  if (range) {
+    reply.code(206)
+    reply.header('content-range', `bytes ${range.start}-${range.end}/${info.size}`)
+    reply.header('content-length', String(range.end - range.start + 1))
+    return reply.send(createReadStream(path, range))
+  }
+  reply.header('content-length', String(info.size))
+  return reply.send(createReadStream(path))
+})
+app.get<{ Params: { sourceId: string; '*': string } }>('/api/markdown/resource/:sourceId/*', async (request, reply) => {
+  const relativePath = request.params['*']
+  const path = await store.getMarkdownDocumentLocation(request.params.sourceId, relativePath)
+  const info = await stat(path)
+  const extension = extname(path).toLowerCase()
+  reply.header('x-content-type-options', 'nosniff')
+  reply.header('cache-control', 'no-store')
+  reply.header('content-security-policy', "default-src 'none'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; media-src 'self' blob:; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'self'")
+  reply.header('content-length', String(info.size))
+  reply.type(workbenchMimeTypes[extension] ?? 'application/octet-stream')
+  return reply.send(createReadStream(path))
+})
 
 app.get('/api/markdown/managed', async () => store.getManagedMarkdownLibrary())
 app.post<{ Body: { title?: string; folderId?: string } }>('/api/markdown/managed/documents', async (request) => store.createManagedMarkdownDocument(request.body?.title, request.body?.folderId))

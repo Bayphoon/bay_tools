@@ -3,6 +3,7 @@ import {
   copyFile,
   lstat,
   mkdir,
+  open,
   readdir,
   readFile,
   realpath,
@@ -584,7 +585,7 @@ export class BayToolsStore {
   async updateMarkdownSourceNote(id: string, note: string): Promise<MarkdownSource> {
     const file = await readJson<MarkdownSourceFile>(this.markdownSourcesPath)
     const position = file.sources.findIndex((source) => source.id === id)
-    if (position < 0) throw new AppError(404, 'SOURCE_NOT_FOUND', 'Markdown 扫描目录不存在')
+    if (position < 0) throw new AppError(404, 'SOURCE_NOT_FOUND', '文档扫描目录不存在')
     const source = { ...file.sources[position]!, note: note.trim() || undefined }
     file.sources[position] = source
     file.revision += 1
@@ -780,7 +781,7 @@ export class BayToolsStore {
 
   private async sourceById(id: string): Promise<MarkdownSource> {
     const source = (await this.listMarkdownSources()).find((value) => value.id === id)
-    if (!source) throw new AppError(404, 'SOURCE_NOT_FOUND', 'Markdown 扫描目录不存在')
+    if (!source) throw new AppError(404, 'SOURCE_NOT_FOUND', '文档扫描目录不存在')
     return source
   }
 
@@ -809,8 +810,17 @@ export class BayToolsStore {
       if (entry.isDirectory()) {
         const children = await this.scanDirectory(root, fullPath)
         if (children.length) nodes.push({ name: entry.name, relativePath, type: 'directory', children })
-      } else if (entry.isFile() && extname(entry.name).toLowerCase() === '.md') {
-        nodes.push({ name: entry.name, relativePath, type: 'file' })
+      } else if (entry.isFile()) {
+        const info = await stat(fullPath)
+        nodes.push({
+          name: entry.name,
+          relativePath,
+          type: 'file',
+          extension: extname(entry.name).toLowerCase(),
+          previewKind: getFileWorkbenchPreviewKind(entry.name),
+          size: info.size,
+          updatedAt: info.mtime.toISOString(),
+        })
       }
     }
     return nodes.sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name, 'zh-CN') : a.type === 'directory' ? -1 : 1)
@@ -829,61 +839,107 @@ export class BayToolsStore {
     return { source, fullPath: canonical }
   }
 
+  async createMarkdownDocument(sourceId: string, relativeDirectory: string, name: string): Promise<MarkdownDocument> {
+    const safeName = validateFileWorkbenchName(name)
+    const previewKind = getFileWorkbenchPreviewKind(safeName)
+    if (previewKind !== 'text' && previewKind !== 'markdown') {
+      throw new AppError(400, 'INVALID_DOCUMENT_TYPE', '只能新建 Markdown、文本或代码文件')
+    }
+    const source = await this.sourceById(sourceId)
+    const root = await realpath(source.path)
+    let directory = root
+    let safeDirectory = ''
+    if (relativeDirectory.trim()) {
+      safeDirectory = ensureSafeRelative(relativeDirectory)
+      const resolved = await this.resolveSourcePath(sourceId, safeDirectory)
+      if (!(await stat(resolved.fullPath)).isDirectory()) throw new AppError(400, 'NOT_DIRECTORY', '新建位置不是目录')
+      directory = resolved.fullPath
+    }
+    const target = join(directory, safeName)
+    if (!pathInside(root, target)) throw new AppError(403, 'PATH_OUTSIDE_SOURCE', '新建文件位置超出扫描目录')
+    let handle
+    try {
+      handle = await open(target, 'wx')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new AppError(409, 'NAME_CONFLICT', '同名文件已经存在')
+      throw error
+    } finally {
+      await handle?.close()
+    }
+    const relativePath = safeDirectory ? `${safeDirectory.replaceAll('\\', '/')}/${safeName}` : safeName
+    return this.getMarkdownDocument(sourceId, relativePath)
+  }
+
   async getMarkdownDocument(sourceId: string, relativePath: string): Promise<MarkdownDocument> {
-    const resolved = await this.resolveSourcePath(sourceId, relativePath, '.md')
-    const content = await readFile(resolved.fullPath, 'utf8')
+    const resolved = await this.resolveSourcePath(sourceId, relativePath)
     const info = await stat(resolved.fullPath)
-    return { sourceId, relativePath: ensureSafeRelative(relativePath), content, hash: hashBuffer(content), updatedAt: info.mtime.toISOString() }
+    if (!info.isFile()) throw new AppError(400, 'NOT_A_FILE', '所选路径不是文件')
+    const extension = extname(resolved.fullPath).toLowerCase()
+    const previewKind = getFileWorkbenchPreviewKind(resolved.fullPath)
+    const editable = (previewKind === 'text' || previewKind === 'markdown') && info.size <= FILE_WORKBENCH_TEXT_EDIT_LIMIT
+    return {
+      sourceId,
+      relativePath: ensureSafeRelative(relativePath),
+      content: editable ? await readFile(resolved.fullPath, 'utf8') : '',
+      hash: await hashFile(resolved.fullPath),
+      updatedAt: info.mtime.toISOString(),
+      extension,
+      previewKind,
+      size: info.size,
+      editable,
+    }
   }
 
   async getMarkdownDocumentLocation(sourceId: string, relativePath: string): Promise<string> {
-    return (await this.resolveSourcePath(sourceId, relativePath, '.md')).fullPath
+    const resolved = await this.resolveSourcePath(sourceId, relativePath)
+    if (!(await stat(resolved.fullPath)).isFile()) throw new AppError(400, 'NOT_A_FILE', '所选路径不是文件')
+    return resolved.fullPath
   }
 
   async saveMarkdownDocument(document: MarkdownDocument): Promise<MarkdownDocument> {
     const current = await this.getMarkdownDocument(document.sourceId, document.relativePath)
-    if (current.hash !== document.hash) throw new ConflictError('Markdown 文件已被其他程序修改', current)
-    await atomicWrite((await this.resolveSourcePath(document.sourceId, document.relativePath, '.md')).fullPath, document.content)
+    if (!current.editable) throw new AppError(400, 'DOCUMENT_READ_ONLY', '该文件类型只支持预览，不能在文档工具中编辑')
+    if (Buffer.byteLength(document.content, 'utf8') > FILE_WORKBENCH_TEXT_EDIT_LIMIT) throw new AppError(413, 'TEXT_TOO_LARGE', '编辑后的文本超过 10 MiB 限制')
+    if (current.hash !== document.hash) throw new ConflictError('文件已被其他程序修改', current)
+    await atomicWrite((await this.resolveSourcePath(document.sourceId, document.relativePath)).fullPath, document.content)
     return this.getMarkdownDocument(document.sourceId, document.relativePath)
   }
 
   async renameMarkdownDocument(sourceId: string, relativePath: string, nextName: string, expectedHash: string): Promise<MarkdownDocument> {
-    if (basename(nextName) !== nextName || extname(nextName).toLowerCase() !== '.md') {
-      throw new AppError(400, 'INVALID_NAME', '文件名必须是不含路径的 .md 文件名')
-    }
+    const safeName = validateFileWorkbenchName(nextName)
     const current = await this.getMarkdownDocument(sourceId, relativePath)
-    if (current.hash !== expectedHash) throw new ConflictError('Markdown 文件已被其他程序修改', current)
-    const { fullPath } = await this.resolveSourcePath(sourceId, relativePath, '.md')
-    const target = join(dirname(fullPath), nextName)
+    if (extname(safeName).toLowerCase() !== current.extension) throw new AppError(400, 'INVALID_EXTENSION', '重命名时不能修改文件扩展名')
+    if (current.hash !== expectedHash) throw new ConflictError('文件已被其他程序修改', current)
+    const { fullPath } = await this.resolveSourcePath(sourceId, relativePath)
+    const target = join(dirname(fullPath), safeName)
     if (await exists(target)) throw new AppError(409, 'NAME_CONFLICT', '同名文件已经存在')
     await rename(fullPath, target)
-    const nextRelative = join(dirname(ensureSafeRelative(relativePath)), nextName).replaceAll('\\', '/')
+    const nextRelative = join(dirname(ensureSafeRelative(relativePath)), safeName).replaceAll('\\', '/')
     return this.getMarkdownDocument(sourceId, nextRelative.startsWith('./') ? nextRelative.slice(2) : nextRelative)
   }
 
   async trashMarkdownDocument(sourceId: string, relativePath: string, expectedHash: string): Promise<void> {
     const document = await this.getMarkdownDocument(sourceId, relativePath)
-    if (document.hash !== expectedHash) throw new ConflictError('Markdown 文件已被其他程序修改', document)
-    const { fullPath } = await this.resolveSourcePath(sourceId, relativePath, '.md')
+    if (document.hash !== expectedHash) throw new ConflictError('文件已被其他程序修改', document)
+    const { fullPath } = await this.resolveSourcePath(sourceId, relativePath)
     const itemId = randomUUID()
     const itemRoot = join(this.trashItemsRoot, itemId)
     await mkdir(itemRoot, { recursive: true })
-    const payload = join(itemRoot, 'payload.md')
+    const payload = join(itemRoot, 'payload')
     await copyFile(fullPath, payload)
-    const buffer = await readFile(payload)
-    if (hashBuffer(buffer) !== expectedHash) {
+    if (await hashFile(payload) !== expectedHash) {
       await rm(itemRoot, { recursive: true, force: true })
       throw new AppError(500, 'TRASH_VERIFY_FAILED', '垃圾箱副本校验失败，原文件未删除')
     }
     const item: TrashItem = {
       id: itemId,
-      kind: 'markdown',
+      kind: 'scanned-document',
       displayName: basename(fullPath),
       originalLocation: fullPath,
       originalRelativePath: ensureSafeRelative(relativePath),
       sourceId,
       deletedAt: now(),
-      size: buffer.byteLength,
+      size: document.size,
       sha256: expectedHash,
     }
     await writeJson(join(itemRoot, 'metadata.json'), item)
@@ -1183,6 +1239,26 @@ export class BayToolsStore {
       library.revision += 1
       library.updatedAt = now()
       await writeJson(this.managedMarkdownIndexPath, library)
+      await this.removeTrashItem(index, item)
+      return { restoredLocation: target }
+    }
+
+    if (item.kind === 'scanned-document') {
+      const payload = join(itemRoot, 'payload')
+      if (await hashFile(payload) !== item.sha256) throw new AppError(500, 'RESTORE_VERIFY_FAILED', '垃圾箱中的文档校验失败')
+      let target = targetDirectory ? join(await realpath(targetDirectory), item.displayName) : item.originalLocation
+      if (!(await exists(dirname(target)))) throw new AppError(409, 'RESTORE_DIRECTORY_MISSING', '原目录不存在，请选择新的恢复目录')
+      if (await exists(target)) {
+        if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '原位置已经存在同名文件')
+        const extension = extname(target)
+        const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16)
+        target = join(dirname(target), `${basename(target, extension)}.restored-${stamp}${extension}`)
+      }
+      await copyFile(payload, target)
+      if (await hashFile(target) !== item.sha256) {
+        await rm(target, { force: true })
+        throw new AppError(500, 'RESTORE_VERIFY_FAILED', '恢复文件校验失败')
+      }
       await this.removeTrashItem(index, item)
       return { restoredLocation: target }
     }
