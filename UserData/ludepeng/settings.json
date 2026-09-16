@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-14T07:39:50.318Z",
-  "revision": 564,
+  "updatedAt": "2026-09-16T03:53:49.643Z",
+  "revision": 650,
   "theme": {
     "mode": "light",
     "lightAccent": "#2563EC",
@@ -13,12 +13,14 @@
   },
   "sidebar": {
     "collapsedGroups": [
-      "markdown-source:063249bf-33b4-4f23-a7d0-5cdfe259a117",
-      "markdown-source:9e89f6fe-130d-485b-9eb5-f1490d3b8335",
       "language",
-      "markdown"
+      "markdown-source:1bca1671-ea5e-4bba-9223-49429744417c",
+      "markdown-source:9e89f6fe-130d-485b-9eb5-f1490d3b8335",
+      "markdown-source:063249bf-33b4-4f23-a7d0-5cdfe259a117",
+      "json",
+      "markdown-source:40792c59-44ed-4c5a-8df6-d33ca436198e"
     ],
-    "width": 252
+    "width": 435
   },
   "workSchedule": {
     "workDays": [
