@@ -42,6 +42,42 @@ export function isScannedDocumentActive(pathname: string, search: string, source
   return pathname === `/markdown/${sourceId}` && new URLSearchParams(search).get('path') === relativePath
 }
 
+export interface ScannedDocumentLink {
+  relativePath: string
+  hash: string
+}
+
+export function resolveScannedDocumentLink(documentPath: string, href: string): ScannedDocumentLink | undefined {
+  const value = href.trim()
+  if (!value || value.startsWith('#') || value.startsWith('?') || value.startsWith('/') || value.startsWith('\\') || /^[a-z][a-z0-9+.-]*:/i.test(value)) return undefined
+
+  const hashIndex = value.indexOf('#')
+  const hash = hashIndex >= 0 ? value.slice(hashIndex) : ''
+  const pathAndQuery = hashIndex >= 0 ? value.slice(0, hashIndex) : value
+  const encodedPath = pathAndQuery.split('?', 1)[0]!.replaceAll('\\', '/')
+  if (!encodedPath || encodedPath.endsWith('/')) return undefined
+
+  const pathSegments: string[] = []
+  for (const encodedSegment of encodedPath.split('/')) {
+    try { pathSegments.push(decodeURIComponent(encodedSegment)) } catch { return undefined }
+  }
+  const leaf = pathSegments.at(-1)
+  if (!leaf || leaf === '.' || leaf === '..') return undefined
+
+  const segments = documentPath.replaceAll('\\', '/').split('/').filter(Boolean).slice(0, -1)
+  for (const segment of pathSegments) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') {
+      if (!segments.length) return undefined
+      segments.pop()
+      continue
+    }
+    if (segment.includes('/') || segment.includes('\\') || segment.includes('\0')) return undefined
+    segments.push(segment)
+  }
+  return segments.length ? { relativePath: segments.join('/'), hash } : undefined
+}
+
 export function createSafeHtmlPreviewDocument(content: string, baseHref: string): string {
   // A <base> is required so relative images and styles can load through the
   // restricted resource endpoint. Keep fragment-only links inside srcdoc;

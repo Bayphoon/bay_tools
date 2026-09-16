@@ -311,7 +311,7 @@ app.get('/api/markdown/managed', async () => store.getManagedMarkdownLibrary())
 app.post<{ Body: { title?: string; folderId?: string } }>('/api/markdown/managed/documents', async (request) => store.createManagedMarkdownDocument(request.body?.title, request.body?.folderId))
 app.get<{ Params: { id: string } }>('/api/markdown/managed/documents/:id', async (request) => store.getManagedMarkdownDocument(request.params.id))
 app.put<{ Params: { id: string }; Body: ManagedMarkdownDocument }>('/api/markdown/managed/documents/:id', async (request) => {
-  if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', 'Markdown 文档 ID 不匹配')
+  if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', '文档 ID 不匹配')
   return store.updateManagedMarkdownDocument(request.body)
 })
 app.post<{ Params: { id: string } }>('/api/markdown/managed/documents/:id/duplicate', async (request) => store.duplicateManagedMarkdownDocument(request.params.id))

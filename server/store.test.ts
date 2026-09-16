@@ -219,6 +219,37 @@ describe('BayToolsStore', () => {
     expect(await store.getManagedMarkdownDocument(saved.id)).toMatchObject({ content: savedAfterMove.content, folderId: archive.id })
   })
 
+  it('creates BayTools text and code documents while preserving their extensions', async () => {
+    const document = await store.createManagedMarkdownDocument('临时脚本.lua')
+    expect(document).toMatchObject({ title: '临时脚本.lua', extension: '.lua', previewKind: 'text', content: '' })
+    expect(await store.getManagedMarkdownDocumentLocation(document.id)).toBe(join(root, 'Doc', 'markdown', 'documents', 'files', `${document.id}.lua`))
+
+    const saved = await store.updateManagedMarkdownDocument({ ...document, content: 'return true' })
+    expect((await store.getManagedMarkdownDocument(saved.id)).content).toBe('return true')
+    const duplicate = await store.duplicateManagedMarkdownDocument(saved.id)
+    expect(duplicate).toMatchObject({ title: '临时脚本 副本.lua', extension: '.lua', previewKind: 'text', content: 'return true' })
+
+    await store.trashManagedMarkdownDocument(saved.id)
+    const trash = (await store.listTrash()).find((item) => item.managedDocument?.id === saved.id)!
+    await store.restoreTrash(trash.id)
+    expect(await store.getManagedMarkdownDocument(saved.id)).toMatchObject({ extension: '.lua', previewKind: 'text', content: 'return true' })
+
+    await expect(store.createManagedMarkdownDocument('图片.png')).rejects.toMatchObject({ code: 'INVALID_DOCUMENT_TYPE' })
+    await expect(store.updateManagedMarkdownDocument({ ...saved, title: '临时脚本.txt' })).rejects.toMatchObject({ code: 'INVALID_EXTENSION' })
+  })
+
+  it('treats legacy BayTools documents without type metadata as Markdown', async () => {
+    const document = await store.createManagedMarkdownDocument('旧文档')
+    const indexPath = join(root, 'Doc', 'markdown', 'documents', 'index.json')
+    const index = JSON.parse(await readFile(indexPath, 'utf8'))
+    delete index.documents[0].extension
+    delete index.documents[0].previewKind
+    await writeFile(indexPath, JSON.stringify(index), 'utf8')
+
+    expect((await store.getManagedMarkdownLibrary()).documents[0]).toMatchObject({ id: document.id, extension: '.md', previewKind: 'markdown' })
+    expect((await store.getManagedMarkdownDocument(document.id)).content).toBe('')
+  })
+
   it('rejects traversal and markdown write conflicts', async () => {
     const docs = join(root, 'docs')
     await mkdir(docs)

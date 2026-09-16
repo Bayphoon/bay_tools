@@ -115,6 +115,29 @@ export function getFileWorkbenchPreviewKind(name: string, mimeType = ''): FileWo
   return 'binary'
 }
 
+function managedDocumentType(name: string): { extension: string; previewKind: 'markdown' | 'text' } {
+  const explicitExtension = extname(name).toLowerCase()
+  const extension = explicitExtension || '.md'
+  if (!/^\.[a-z0-9]+$/i.test(extension)) throw new AppError(400, 'INVALID_EXTENSION', '文件扩展名无效')
+  const previewKind = getFileWorkbenchPreviewKind(`document${extension}`)
+  if (previewKind !== 'text' && previewKind !== 'markdown') {
+    throw new AppError(400, 'INVALID_DOCUMENT_TYPE', '只能新建 Markdown、文本或代码文件')
+  }
+  return { extension, previewKind }
+}
+
+function normalizeManagedDocumentSummary(document: ManagedMarkdownDocumentSummary): ManagedMarkdownDocumentSummary {
+  const rawExtension = (document as Partial<ManagedMarkdownDocumentSummary>).extension
+  const type = managedDocumentType(typeof rawExtension === 'string' ? `document${rawExtension}` : 'document.md')
+  return { ...document, ...type }
+}
+
+function managedDocumentCopyTitle(title: string, extension: string, suffix: string): string {
+  return title.toLowerCase().endsWith(extension)
+    ? `${title.slice(0, -extension.length)}${suffix}${extension}`
+    : `${title}${suffix}`
+}
+
 async function hashFile(path: string): Promise<string> {
   const hash = createHash('sha256')
   for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer)
@@ -623,12 +646,19 @@ export class BayToolsStore {
   }
 
   async getManagedMarkdownLibrary(): Promise<ManagedMarkdownLibrary> {
-    return readJson<ManagedMarkdownLibrary>(this.managedMarkdownIndexPath)
+    const library = await readJson<ManagedMarkdownLibrary>(this.managedMarkdownIndexPath)
+    const documents = library.documents.map(normalizeManagedDocumentSummary)
+    const migrated = documents.some((document, index) => document.extension !== library.documents[index]!.extension || document.previewKind !== library.documents[index]!.previewKind)
+    if (!migrated) return library
+    const normalized = { ...library, documents }
+    await writeJson(this.managedMarkdownIndexPath, normalized)
+    return normalized
   }
 
-  private managedMarkdownDocumentPath(id: string): string {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError(400, 'INVALID_ID', 'Markdown 文档 ID 无效')
-    return join(this.managedMarkdownFilesRoot, `${id}.md`)
+  private managedMarkdownDocumentPath(id: string, extension = '.md'): string {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new AppError(400, 'INVALID_ID', '文档 ID 无效')
+    const type = managedDocumentType(`document${extension}`)
+    return join(this.managedMarkdownFilesRoot, `${id}${type.extension}`)
   }
 
   async createManagedMarkdownFolder(name = '未命名分组'): Promise<ManagedMarkdownFolder> {
@@ -657,7 +687,7 @@ export class BayToolsStore {
   async deleteManagedMarkdownFolder(id: string): Promise<void> {
     const library = await this.getManagedMarkdownLibrary()
     if (library.documents.some((document) => document.folderId === id)) {
-      throw new AppError(409, 'FOLDER_NOT_EMPTY', '分组中还有 Markdown 文档')
+      throw new AppError(409, 'FOLDER_NOT_EMPTY', '分组中还有文档')
     }
     if (!library.folders.some((folder) => folder.id === id)) throw new AppError(404, 'NOT_FOUND', 'Markdown 分组不存在')
     library.folders = library.folders.filter((folder) => folder.id !== id)
@@ -666,19 +696,22 @@ export class BayToolsStore {
     await writeJson(this.managedMarkdownIndexPath, library)
   }
 
-  async createManagedMarkdownDocument(title = '未命名 Markdown', folderId?: string): Promise<ManagedMarkdownDocument> {
+  async createManagedMarkdownDocument(title = '未命名文档.md', folderId?: string): Promise<ManagedMarkdownDocument> {
     const library = await this.getManagedMarkdownLibrary()
-    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
+    if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', '文档分组不存在')
+    const safeTitle = validateFileWorkbenchName(title || '未命名文档.md')
+    const type = managedDocumentType(safeTitle)
     const createdAt = now()
     const summary: ManagedMarkdownDocumentSummary = {
       id: randomUUID(),
-      title: title.trim() || '未命名 Markdown',
+      title: safeTitle,
+      ...type,
       ...(folderId ? { folderId } : {}),
       createdAt,
       updatedAt: createdAt,
       revision: 1,
     }
-    await atomicWrite(this.managedMarkdownDocumentPath(summary.id), '')
+    await atomicWrite(this.managedMarkdownDocumentPath(summary.id, summary.extension), '')
     library.documents.push(summary)
     library.revision += 1
     library.updatedAt = now()
@@ -689,27 +722,35 @@ export class BayToolsStore {
   async getManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument> {
     const library = await this.getManagedMarkdownLibrary()
     const summary = library.documents.find((document) => document.id === id)
-    if (!summary) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
-    const path = this.managedMarkdownDocumentPath(id)
-    if (!(await exists(path))) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档文件不存在')
+    if (!summary) throw new AppError(404, 'NOT_FOUND', 'BayTools 文档不存在')
+    const path = this.managedMarkdownDocumentPath(id, summary.extension)
+    if (!(await exists(path))) throw new AppError(404, 'NOT_FOUND', 'BayTools 文档文件不存在')
     return { ...summary, content: await readFile(path, 'utf8') }
   }
 
   async updateManagedMarkdownDocument(next: ManagedMarkdownDocument): Promise<ManagedMarkdownDocument> {
     const library = await this.getManagedMarkdownLibrary()
     const position = library.documents.findIndex((document) => document.id === next.id)
-    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools 文档不存在')
     const current = library.documents[position]!
-    if (current.revision !== next.revision) throw new ConflictError('Markdown 文档已在其他窗口中修改', await this.getManagedMarkdownDocument(next.id))
+    if (current.revision !== next.revision) throw new ConflictError('文档已在其他窗口中修改', await this.getManagedMarkdownDocument(next.id))
+    const title = validateFileWorkbenchName(next.title || current.title)
+    const requestedExtension = extname(title).toLowerCase()
+    const currentTitleHasExtension = extname(current.title).toLowerCase() === current.extension
+    if ((requestedExtension && requestedExtension !== current.extension) || (currentTitleHasExtension && !requestedExtension)) {
+      throw new AppError(400, 'INVALID_EXTENSION', `重命名时不能修改或移除 ${current.extension} 扩展名`)
+    }
     const summary: ManagedMarkdownDocumentSummary = {
       id: current.id,
-      title: next.title.trim() || current.title,
+      title,
+      extension: current.extension,
+      previewKind: current.previewKind,
       ...(current.folderId ? { folderId: current.folderId } : {}),
       createdAt: current.createdAt,
       updatedAt: now(),
       revision: current.revision + 1,
     }
-    await atomicWrite(this.managedMarkdownDocumentPath(next.id), next.content)
+    await atomicWrite(this.managedMarkdownDocumentPath(next.id, current.extension), next.content)
     library.documents[position] = summary
     library.revision += 1
     library.updatedAt = now()
@@ -719,14 +760,14 @@ export class BayToolsStore {
 
   async duplicateManagedMarkdownDocument(id: string): Promise<ManagedMarkdownDocument> {
     const source = await this.getManagedMarkdownDocument(id)
-    const duplicate = await this.createManagedMarkdownDocument(`${source.title} 副本`, source.folderId)
+    const duplicate = await this.createManagedMarkdownDocument(managedDocumentCopyTitle(source.title, source.extension, ' 副本'), source.folderId)
     return this.updateManagedMarkdownDocument({ ...duplicate, content: source.content })
   }
 
   async moveManagedMarkdownDocument(id: string, folderId?: string): Promise<ManagedMarkdownDocumentSummary> {
     const library = await this.getManagedMarkdownLibrary()
     const position = library.documents.findIndex((document) => document.id === id)
-    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools Markdown 文档不存在')
+    if (position < 0) throw new AppError(404, 'NOT_FOUND', 'BayTools 文档不存在')
     if (folderId && !library.folders.some((folder) => folder.id === folderId)) throw new AppError(404, 'FOLDER_NOT_FOUND', 'Markdown 分组不存在')
     const current = library.documents[position]!
     const moved = { ...current, ...(folderId ? { folderId } : {}), updatedAt: now() }
@@ -739,23 +780,25 @@ export class BayToolsStore {
   }
 
   async getManagedMarkdownDocumentLocation(id: string): Promise<string> {
-    await this.getManagedMarkdownDocument(id)
-    return this.managedMarkdownDocumentPath(id)
+    const document = await this.getManagedMarkdownDocument(id)
+    return this.managedMarkdownDocumentPath(id, document.extension)
   }
 
   async trashManagedMarkdownDocument(id: string): Promise<void> {
     const document = await this.getManagedMarkdownDocument(id)
     const library = await this.getManagedMarkdownLibrary()
-    const source = this.managedMarkdownDocumentPath(id)
+    const source = this.managedMarkdownDocumentPath(id, document.extension)
     const itemId = randomUUID()
     const itemRoot = join(this.trashItemsRoot, itemId)
     await mkdir(itemRoot, { recursive: true })
-    const payload = join(itemRoot, 'payload.md')
+    const payload = join(itemRoot, `payload${document.extension}`)
     await rename(source, payload)
     const buffer = await readFile(payload)
     const managedDocument: ManagedMarkdownDocumentSummary = {
       id: document.id,
       title: document.title,
+      extension: document.extension,
+      previewKind: document.previewKind,
       ...(document.folderId ? { folderId: document.folderId } : {}),
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
@@ -1211,24 +1254,26 @@ export class BayToolsStore {
 
     if (item.kind === 'managed-markdown') {
       if (!item.managedDocument) throw new AppError(500, 'INVALID_TRASH_ITEM', 'Markdown 垃圾项缺少文档信息')
-      const payload = join(itemRoot, 'payload.md')
+      const managedDocument = normalizeManagedDocumentSummary(item.managedDocument)
+      const typedPayload = join(itemRoot, `payload${managedDocument.extension}`)
+      const payload = await exists(typedPayload) ? typedPayload : join(itemRoot, 'payload.md')
       const content = await readFile(payload, 'utf8')
       const library = await this.getManagedMarkdownLibrary()
-      const target = this.managedMarkdownDocumentPath(item.managedDocument.id)
-      if (await exists(target) || library.documents.some((document) => document.id === item.managedDocument!.id)) {
-        if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID Markdown 文档已经存在')
-        const folderId = item.managedDocument.folderId && library.folders.some((folder) => folder.id === item.managedDocument!.folderId)
-          ? item.managedDocument.folderId
+      const target = this.managedMarkdownDocumentPath(managedDocument.id, managedDocument.extension)
+      if (await exists(target) || library.documents.some((document) => document.id === managedDocument.id)) {
+        if (!asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID 文档已经存在')
+        const folderId = managedDocument.folderId && library.folders.some((folder) => folder.id === managedDocument.folderId)
+          ? managedDocument.folderId
           : undefined
-        const created = await this.createManagedMarkdownDocument(`${item.managedDocument.title}（已恢复）`, folderId)
+        const created = await this.createManagedMarkdownDocument(managedDocumentCopyTitle(managedDocument.title, managedDocument.extension, '（已恢复）'), folderId)
         const restored = await this.updateManagedMarkdownDocument({ ...created, content })
         await this.removeTrashItem(index, item)
-        return { restoredLocation: this.managedMarkdownDocumentPath(restored.id) }
+        return { restoredLocation: this.managedMarkdownDocumentPath(restored.id, restored.extension) }
       }
-      const folderId = item.managedDocument.folderId && library.folders.some((folder) => folder.id === item.managedDocument!.folderId)
-        ? item.managedDocument.folderId
+      const folderId = managedDocument.folderId && library.folders.some((folder) => folder.id === managedDocument.folderId)
+        ? managedDocument.folderId
         : undefined
-      const restored: ManagedMarkdownDocumentSummary = { ...item.managedDocument, ...(folderId ? { folderId } : {}), updatedAt: now() }
+      const restored: ManagedMarkdownDocumentSummary = { ...managedDocument, ...(folderId ? { folderId } : {}), updatedAt: now() }
       if (!folderId) delete restored.folderId
       await copyFile(payload, target)
       if (hashBuffer(await readFile(target)) !== item.sha256) {

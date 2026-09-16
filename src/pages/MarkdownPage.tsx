@@ -9,7 +9,7 @@ import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../com
 import { useMarkdownViewState } from '../hooks/useMarkdownViewState'
 import { ApiError, assetUrl, localBridge, scannedDocumentContentUrl, scannedDocumentResourceBaseUrl } from '../lib/api'
 import { copyFilePath } from '../lib/clipboard'
-import { createSafeHtmlPreviewDocument, documentEditorLanguage, documentKindLabel, formatDocumentSize, inferDocumentPreviewKind } from '../lib/documentTypes'
+import { createSafeHtmlPreviewDocument, documentEditorLanguage, documentKindLabel, formatDocumentSize, inferDocumentPreviewKind, resolveScannedDocumentLink } from '../lib/documentTypes'
 import { useAppStore } from '../store/appStore'
 import { ManagedMarkdownPage } from './ManagedMarkdownPage'
 
@@ -94,8 +94,20 @@ function ExternalMarkdownPage() {
   }, [sourceId, path])
   const previewComponents = useMemo<Components>(() => ({
     img: (props) => <LocalImage sourceId={sourceId ?? ''} documentPath={path} src={props.src} alt={props.alt} />,
-    a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
-  }), [sourceId, path])
+    a: ({ href, children }) => {
+      const internal = href ? resolveScannedDocumentLink(path, href) : undefined
+      if (!internal || !sourceId) {
+        const sameDocument = href?.startsWith('#')
+        return <a href={href} target={sameDocument ? undefined : '_blank'} rel={sameDocument ? undefined : 'noreferrer'}>{children}</a>
+      }
+      const target = `/markdown/${encodeURIComponent(sourceId)}?path=${encodeURIComponent(internal.relativePath)}${internal.hash}`
+      return <a href={target} onClick={(event) => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+        event.preventDefault()
+        navigate(target)
+      }}>{children}</a>
+    },
+  }), [navigate, path, sourceId])
   const isHtmlDocument = document?.previewKind === 'text' && (document.extension === '.html' || document.extension === '.htm')
   useEffect(() => {
     if (!isHtmlDocument) { setHtmlPreviewContent(''); return }
@@ -177,7 +189,7 @@ function ExternalMarkdownPage() {
   }
 
   if (!sourceId || !path) return <div className="page"><PageHeader title="文档工具" description="编辑 Markdown 和文本文件，预览图片、PDF 及其他扫描文件" actions={<><ToolButton onClick={refreshMarkdown}><RefreshCw size={14} />刷新扫描</ToolButton><ToolButton className="primary" onClick={addSource}><FolderPlus size={14} />添加扫描目录</ToolButton></>} />
-    {!markdownTrees.length ? <EmptyState title="还没有扫描目录">可以从左侧文档工具的“＋”菜单添加空 Markdown、文件夹或扫描目录。<div><ToolButton className="primary" onClick={addSource}>选择扫描目录</ToolButton></div></EmptyState> : <div className="source-overview">{markdownTrees.map((source) => {
+    {!markdownTrees.length ? <EmptyState title="还没有扫描目录">可以从左侧文档工具的“＋”菜单新建文件、新建分组或添加扫描目录。<div><ToolButton className="primary" onClick={addSource}>选择扫描目录</ToolButton></div></EmptyState> : <div className="source-overview">{markdownTrees.map((source) => {
       const displayName = source.note?.trim() || source.label
       const counts = countDocuments(source.children)
       return <section className="source-overview-card" key={source.id}><div className="source-overview-icon"><FolderOpen size={21} /></div><div className="source-overview-main"><button className="source-note-button" onClick={() => editSourceNote(source)} title="点击修改备注名"><strong>{displayName}</strong><Pencil size={12} /></button><span>文件夹名：{source.label}</span><code title={source.path}>{source.path}</code><small>{source.error ?? `扫描到 ${counts.total} 个文件`}</small>{!source.error && counts.total > 0 && <div className="document-kind-summary">{(['markdown', 'text', 'image', 'pdf', 'binary'] as const).filter((kind) => counts[kind]).map((kind) => <span key={kind}>{documentKindLabel(kind)} {counts[kind]}</span>)}</div>}</div><div className="source-overview-actions"><ToolButton className="primary" onClick={() => createSourceDocument(source)}><FilePlus2 size={14} />新建文件</ToolButton><ToolButton onClick={() => refreshMarkdown()}><RefreshCw size={14} />刷新扫描</ToolButton><ToolButton onClick={() => localBridge.revealMarkdownSource(source.id)}><FolderOpen size={14} />打开文件位置</ToolButton><ToolButton onClick={() => editSourceNote(source)}><Pencil size={14} />修改备注</ToolButton><ToolButton className="danger" onClick={() => removeSource(source)}><Trash2 size={14} />移除目录</ToolButton></div></section>

@@ -96,7 +96,7 @@ function MarkdownNodes({ sourceId, nodes, onChanged, onCreate, depth = 0 }: { so
   return <>{nodes.map((node) => node.type === 'directory' ? <div key={node.relativePath}>
     <div className="nav-child-wrap document-directory-wrap"><button className="nav-tree-row" style={{ paddingLeft: 18 + depth * 12 }} onClick={() => setCollapsed((value) => ({ ...value, [node.relativePath]: !value[node.relativePath] }))}>
       {collapsed[node.relativePath] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={13} /><span>{node.name}</span>
-    </button><Menu>{item('在此目录新建文件', () => { void onCreate(node.relativePath) })}</Menu></div>
+    </button><Menu>{item('新建文件', () => { void onCreate(node.relativePath) })}</Menu></div>
     {!collapsed[node.relativePath] && <MarkdownNodes sourceId={sourceId} nodes={node.children ?? []} onChanged={onChanged} onCreate={onCreate} depth={depth + 1} />}
   </div> : <div className="nav-child-wrap" key={node.relativePath}>
     <Link className={`nav-tree-row nav-file document-file-row ${isScannedDocumentActive(location.pathname, location.search, sourceId, node.relativePath) ? 'active' : ''}`} aria-current={isScannedDocumentActive(location.pathname, location.search, sourceId, node.relativePath) ? 'page' : undefined} style={{ paddingLeft: 34 + depth * 12 }} to={`/markdown/${sourceId}?path=${encodeURIComponent(node.relativePath)}`}><DocumentNodeIcon node={node} /><span>{node.name}</span></Link>
@@ -124,7 +124,7 @@ function ManagedDocumentRow({ document, folders, onChanged }: { document: Manage
     <NavLink className="nav-tree-row nav-file" to={`/markdown/document/${document.id}`}><span className="nav-child-dot" aria-hidden="true" /><span>{document.title}</span></NavLink>
     <Menu>{item('重命名', async () => {
       const current = await localBridge.getManagedMarkdownDocument(document.id)
-      const title = window.prompt('Markdown 文档名称', current.title)?.trim()
+      const title = window.prompt('文件名（不能修改扩展名）', current.title)?.trim()
       if (!title || title === current.title) return
       await localBridge.updateManagedMarkdownDocument({ ...current, title })
       await onChanged()
@@ -141,23 +141,33 @@ function ManagedDocumentRow({ document, folders, onChanged }: { document: Manage
   </div>
 }
 
-function ManagedMarkdownSection({ library, onChanged }: { library: ManagedMarkdownLibrary; onChanged: () => Promise<void> }) {
+function ManagedMarkdownSection({ library, filter, onChanged }: { library: ManagedMarkdownLibrary; filter: DocumentFilter; onChanged: () => Promise<void> }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(true)
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({})
   const createDocument = async (folderId?: string) => {
-    const document = await localBridge.createManagedMarkdownDocument(undefined, folderId)
-    await onChanged()
-    navigate(`/markdown/document/${document.id}`)
+    const name = window.prompt('新文件名（支持 Markdown、文本和代码文件）', '未命名文档.md')?.trim()
+    if (!name) return
+    try {
+      const document = await localBridge.createManagedMarkdownDocument(name, folderId)
+      await onChanged()
+      navigate(`/markdown/document/${document.id}`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '新建文件失败')
+    }
   }
-  const rootDocuments = library.documents.filter((document) => !document.folderId)
+  const matchesFilter = (document: ManagedMarkdownDocumentSummary) => filter === 'all' || document.previewKind === filter
+  const rootDocuments = library.documents.filter((document) => !document.folderId && matchesFilter(document))
+  const folders = filter === 'all'
+    ? library.folders
+    : library.folders.filter((folder) => library.documents.some((document) => document.folderId === folder.id && matchesFilter(document)))
   return <div className="source-tree managed-markdown-tree">
     <div className="source-title"><button className="source-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}{open ? <FolderOpen size={14} /> : <Folder size={14} />}<span>BayTools 文档</span></button></div>
-    {open && <>{rootDocuments.map((document) => <ManagedDocumentRow key={document.id} document={document} folders={library.folders} onChanged={onChanged} />)}{library.folders.map((folder) => {
-      const documents = library.documents.filter((document) => document.folderId === folder.id)
+    {open && <>{rootDocuments.map((document) => <ManagedDocumentRow key={document.id} document={document} folders={library.folders} onChanged={onChanged} />)}{folders.map((folder) => {
+      const documents = library.documents.filter((document) => document.folderId === folder.id && matchesFilter(document))
       const collapsed = collapsedFolders[folder.id] ?? false
       return <div key={folder.id} className="managed-folder">
-        <div className="source-title"><button className="source-toggle managed-folder-toggle" aria-expanded={!collapsed} onClick={() => setCollapsedFolders((value) => ({ ...value, [folder.id]: !collapsed }))}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={14} /><span>{folder.name}</span></button><Menu>{item('新建空文档', () => { void createDocument(folder.id) })}{item('重命名', async () => {
+        <div className="source-title"><button className="source-toggle managed-folder-toggle" aria-expanded={!collapsed} onClick={() => setCollapsedFolders((value) => ({ ...value, [folder.id]: !collapsed }))}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<Folder size={14} /><span>{folder.name}</span></button><Menu>{item('新建文件', () => { void createDocument(folder.id) })}{item('重命名', async () => {
           const name = window.prompt('分组名称', folder.name)?.trim()
           if (!name || name === folder.name) return
           await localBridge.renameManagedMarkdownFolder(folder.id, name)
@@ -254,9 +264,15 @@ export function Sidebar() {
   }
 
   const createManagedDocument = async () => {
-    const document = await localBridge.createManagedMarkdownDocument()
-    await refreshManagedMarkdown()
-    navigate(`/markdown/document/${document.id}`)
+    const name = window.prompt('新文件名（支持 Markdown、文本和代码文件）', '未命名文档.md')?.trim()
+    if (!name) return
+    try {
+      const document = await localBridge.createManagedMarkdownDocument(name)
+      await refreshManagedMarkdown()
+      navigate(`/markdown/document/${document.id}`)
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : '新建文件失败')
+    }
   }
 
   const createManagedFolder = async () => {
@@ -306,9 +322,9 @@ export function Sidebar() {
       <div className="nav-group">
         <div className="nav-parent">
           <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>文档</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
-          <Menu triggerLabel="添加文档内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 Markdown', () => { void createManagedDocument() })}{item('添加分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
+          <Menu triggerLabel="文档操作" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建文件', () => { void createManagedDocument() })}{item('新建分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
         </div>
-        {markdownOpen && <div className="nav-children"><div className="document-filter" aria-label="按文件类型筛选">{([['all', '全部'], ['markdown', 'MD'], ['text', '文本'], ['image', '图片'], ['pdf', 'PDF'], ['binary', '其他']] as const).map(([value, label]) => <button key={value} className={documentFilter === value ? 'active' : ''} onClick={() => setDocumentFilter(value)}>{label}</button>)}</div>{managedMarkdown && (documentFilter === 'all' || documentFilter === 'markdown') && <ManagedMarkdownSection library={managedMarkdown} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
+        {markdownOpen && <div className="nav-children"><div className="document-filter" aria-label="按文件类型筛选">{([['all', '全部'], ['markdown', 'MD'], ['text', '文本'], ['image', '图片'], ['pdf', 'PDF'], ['binary', '其他']] as const).map(([value, label]) => <button key={value} className={documentFilter === value ? 'active' : ''} onClick={() => setDocumentFilter(value)}>{label}</button>)}</div>{managedMarkdown && (documentFilter === 'all' || documentFilter === 'markdown' || documentFilter === 'text') && <ManagedMarkdownSection library={managedMarkdown} filter={documentFilter} onChanged={refreshManagedMarkdown} />}{markdownTrees.map((source) => {
           const collapsed = settings?.sidebar.collapsedGroups.includes(`markdown-source:${source.id}`) ?? false
           const displayName = source.note?.trim() || source.label
           const visibleNodes = filterDocumentNodes(source.children, documentFilter)
