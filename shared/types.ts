@@ -153,6 +153,8 @@ export interface ManagedMarkdownFolder {
 export interface ManagedMarkdownDocumentSummary {
   id: string
   title: string
+  extension: string
+  previewKind: 'markdown' | 'text'
   folderId?: string
   createdAt: string
   updatedAt: string
