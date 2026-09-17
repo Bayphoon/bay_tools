@@ -322,6 +322,26 @@ export interface CodeCardLibrary {
   workspaces: CodeCardWorkspaceSummary[]
 }
 
+export type CodeCardSearchMode = 'fuzzy' | 'exact'
+
+export interface CodeCardSearchResult {
+  workspaceId: string
+  workspaceTitle: string
+  cardId: string
+  cardTitle: string
+  excerpt: string
+  matchField: 'title' | 'code'
+  line?: number
+}
+
+export interface CodeCardSearchPage {
+  items: CodeCardSearchResult[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 export const CODE_CARD_IMAGE_MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
 export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench' | 'code-card'
@@ -474,6 +494,7 @@ export interface LocalBridge {
   revealFileWorkbenchItem(id: string): Promise<void>
   getFileWorkbenchItemPath(id: string): Promise<string>
   getCodeCardLibrary(): Promise<CodeCardLibrary>
+  searchCodeCards(search: string, page: number, mode: CodeCardSearchMode): Promise<CodeCardSearchPage>
   createCodeCardWorkspace(title?: string, folderId?: string): Promise<CodeCardWorkspace>
   getCodeCardWorkspace(id: string): Promise<CodeCardWorkspace>
   updateCodeCardWorkspace(workspace: CodeCardWorkspace): Promise<CodeCardWorkspace>

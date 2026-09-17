@@ -600,11 +600,32 @@ a { color: inherit; text-decoration: none; }
 .code-cards-header > div { min-width: 0; }
 .code-cards-page-title { width: min(560px, 64vw); padding: 2px 4px; border: 1px solid transparent; border-radius: 5px; outline: 0; background: transparent; color: var(--text); font-size: 23px; font-weight: 760; letter-spacing: -.02em; }
 .code-cards-page-title:hover, .code-cards-page-title:focus { border-color: var(--border); background: var(--surface); }
+.code-card-global-search { overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: 0 6px 18px color-mix(in srgb, #000 7%, transparent); }
+.code-card-search-controls { display: grid; grid-template-columns: minmax(240px, 1fr) auto 82px; align-items: center; gap: 9px; padding: 9px; }
+.code-card-search-field { display: flex; min-width: 0; height: 34px; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--muted); }
+.code-card-search-field:focus-within { border-color: var(--accent); color: var(--accent); }
+.code-card-search-field input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 13px; }
+.code-card-search-field button { display: grid; place-items: center; width: 23px; height: 23px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.code-card-search-field button:hover { background: var(--surface-hover); color: var(--text); }
+.code-card-search-mode { white-space: nowrap; }
+.code-card-search-count { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+.code-card-search-results { display: grid; gap: 5px; max-height: 370px; overflow: auto; padding: 7px 9px 9px; border-top: 1px solid var(--border); background: var(--bg); }
+.code-card-search-result { display: grid; grid-template-columns: minmax(180px, .75fr) auto minmax(240px, 1.25fr); align-items: center; gap: 12px; min-width: 0; padding: 8px 10px; border: 1px solid transparent; border-radius: 6px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+.code-card-search-result:hover, .code-card-search-result:focus-visible { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--surface-hover); outline: 0; }
+.code-card-search-result-path { display: flex; min-width: 0; align-items: center; gap: 5px; }
+.code-card-search-result-path strong, .code-card-search-result-path span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-card-search-result-path svg { flex: 0 0 auto; color: var(--muted); }
+.code-card-search-result-context { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.code-card-search-result code { overflow: hidden; color: var(--text); font: 12px/1.5 "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.code-card-search-empty { padding: 22px; color: var(--muted); font-size: 12px; text-align: center; }
+.code-card-search-pagination { position: sticky; bottom: -9px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 7px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); }
+.code-card-search-pagination span { color: var(--muted); font-size: 12px; }
 .save-state { min-height: 17px; padding-left: 5px; color: var(--muted); font-size: 11px; }
 .save-state.error, .save-state.conflict { color: var(--danger); }
 .save-state.saved { color: var(--success); }
 .code-card-list { display: grid; gap: 14px; }
 .code-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 7px 22px color-mix(in srgb, #000 9%, transparent); }
+.code-card.located { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent), 0 7px 22px color-mix(in srgb, #000 9%, transparent); }
 .code-card:focus-within { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .code-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 45px; padding: 6px 9px 6px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
 .code-card.collapsed .code-card-header { border-bottom: 0; }
@@ -674,6 +695,11 @@ a { color: inherit; text-decoration: none; }
   .mode-preview .markdown-preview-shell { position: relative; grid-template-columns: minmax(0, 1fr); }
   .mode-preview .markdown-preview-shell.toc-open { grid-template-columns: minmax(0, 1fr); }
   .mode-preview .markdown-toc { position: absolute; inset: 0 auto 0 0; z-index: 3; width: min(250px, 84%); box-shadow: 12px 0 30px rgba(0,0,0,.2); }
+  .code-card-search-controls { grid-template-columns: minmax(0, 1fr); }
+  .code-card-search-mode { justify-self: start; }
+  .code-card-search-count { text-align: left; }
+  .code-card-search-result { grid-template-columns: minmax(0, 1fr) auto; }
+  .code-card-search-result code { grid-column: 1 / -1; }
   .code-card-body { grid-template-columns: minmax(0, 1fr) !important; height: auto !important; min-height: 660px; }
   .code-card-splitter { display: none; }
   .code-card-code, .code-card-image-pane { min-height: 320px; }

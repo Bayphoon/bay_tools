@@ -3,6 +3,7 @@ import type {
   AppSettings,
   CodeCardFolder,
   CodeCardLibrary,
+  CodeCardSearchPage,
   CodeCardWorkspace,
   CodeCardWorkspaceSummary,
   ColorState,
@@ -220,6 +221,10 @@ export const localBridge: LocalBridge = {
   revealFileWorkbenchItem: (id: string) => request<void>(`/api/file-workbench/${id}/reveal`, { method: 'POST', body: '{}' }),
   getFileWorkbenchItemPath: async (id: string) => (await request<{ path: string }>(`/api/file-workbench/${id}/location`)).path,
   getCodeCardLibrary: () => request<CodeCardLibrary>('/api/code-cards'),
+  searchCodeCards: (search, page, mode) => {
+    const query = new URLSearchParams({ search, page: String(page), mode })
+    return request<CodeCardSearchPage>(`/api/code-cards/search?${query}`)
+  },
   createCodeCardWorkspace: (title, folderId) => request<CodeCardWorkspace>('/api/code-cards/workspaces', { method: 'POST', body: JSON.stringify({ title, folderId }) }),
   getCodeCardWorkspace: (id) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${id}`),
   updateCodeCardWorkspace: (workspace) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${workspace.id}`, { method: 'PUT', body: JSON.stringify(workspace) }),

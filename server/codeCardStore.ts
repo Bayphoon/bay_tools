@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
-import type { CodeCard, CodeCardFolder, CodeCardImage, CodeCardLibrary, CodeCardWorkspace, CodeCardWorkspaceSummary, TrashItem } from '../shared/types.js'
+import type { CodeCard, CodeCardFolder, CodeCardImage, CodeCardLibrary, CodeCardSearchMode, CodeCardSearchPage, CodeCardSearchResult, CodeCardWorkspace, CodeCardWorkspaceSummary, TrashItem } from '../shared/types.js'
 import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError, ConflictError } from './errors.js'
 import { exists, readJson, writeJson } from './filesystem.js'
@@ -14,6 +14,8 @@ const now = () => new Date().toISOString()
 const UUID_PATTERN = /^[0-9a-f-]{36}$/i
 const MAX_CARDS = 100
 const MAX_CODE_LENGTH = 2 * 1024 * 1024
+const SEARCH_PAGE_SIZE = 20
+const SEARCH_QUERY_MAX_LENGTH = 200
 
 interface TrashIndex {
   schemaVersion: 1
@@ -50,6 +52,69 @@ function createCard(): CodeCard {
     createdAt,
     updatedAt: createdAt,
   }
+}
+
+interface CodeCardSearchMatch {
+  field: 'title' | 'code'
+  index: number
+}
+
+function tokenizeProjectSearch(search: string): string[] {
+  const tokens: string[] = []
+  let token = ''
+  let quoted = false
+  const pushToken = () => {
+    const normalized = token.trim().toLowerCase()
+    if (normalized) tokens.push(normalized)
+    token = ''
+  }
+
+  for (const character of search) {
+    if (character === '"') {
+      quoted = !quoted
+      continue
+    }
+    if (!quoted && /[\s,*?]/.test(character)) {
+      pushToken()
+      continue
+    }
+    token += character
+  }
+  pushToken()
+  return tokens
+}
+
+function projectSearchMatch(title: string, code: string, search: string): CodeCardSearchMatch | undefined {
+  const terms = tokenizeProjectSearch(search)
+  if (!terms.length) return undefined
+  const normalizedTitle = title.toLowerCase()
+  const normalizedCode = code.toLowerCase()
+  const titleIndexes = terms.map((term) => normalizedTitle.indexOf(term))
+  const codeIndexes = terms.map((term) => normalizedCode.indexOf(term))
+
+  if (terms.some((_, index) => titleIndexes[index] < 0 && codeIndexes[index] < 0)) return undefined
+  if (titleIndexes.every((index) => index >= 0)) return { field: 'title', index: Math.min(...titleIndexes) }
+
+  const matchedCodeIndexes = codeIndexes.filter((index, termIndex) => index >= 0 && titleIndexes[termIndex] < 0)
+  return { field: 'code', index: Math.min(...matchedCodeIndexes) }
+}
+
+function phraseSearchMatch(title: string, code: string, search: string): CodeCardSearchMatch | undefined {
+  const needle = search.toLowerCase()
+  const titleIndex = title.toLowerCase().indexOf(needle)
+  if (titleIndex >= 0) return { field: 'title', index: titleIndex }
+  const codeIndex = code.toLowerCase().indexOf(needle)
+  return codeIndex >= 0 ? { field: 'code', index: codeIndex } : undefined
+}
+
+function codeExcerpt(code: string, index: number): { excerpt: string; line: number } {
+  const safeIndex = Math.max(0, index)
+  const lineStart = code.lastIndexOf('\n', safeIndex - 1) + 1
+  const nextLine = code.indexOf('\n', safeIndex)
+  const lineEnd = nextLine < 0 ? code.length : nextLine
+  const fullLine = code.slice(lineStart, lineEnd).trim() || '(空行)'
+  const excerpt = fullLine.length > 220 ? `${fullLine.slice(0, 217)}…` : fullLine
+  return { excerpt, line: code.slice(0, lineStart).split('\n').length }
 }
 
 export interface CodeCardImageUpload {
@@ -112,6 +177,50 @@ export class CodeCardStore {
 
   async getLibrary(): Promise<CodeCardLibrary> {
     return this.library()
+  }
+
+  async searchWorkspaces(search: string, page: number, mode: CodeCardSearchMode): Promise<CodeCardSearchPage> {
+    const needle = search.trim()
+    if (!needle) return { items: [], total: 0, page: 1, pageSize: SEARCH_PAGE_SIZE, totalPages: 1 }
+    if (needle.length > SEARCH_QUERY_MAX_LENGTH) throw new AppError(400, 'SEARCH_TOO_LONG', `搜索内容不能超过 ${SEARCH_QUERY_MAX_LENGTH} 个字符`)
+    if (mode !== 'fuzzy' && mode !== 'exact') throw new AppError(400, 'INVALID_SEARCH_MODE', '搜索模式无效')
+    const library = await this.library()
+    const results: CodeCardSearchResult[] = []
+    for (const workspaceSummary of library.workspaces) {
+      const workspace = await this.getWorkspace(workspaceSummary.id)
+      for (const card of workspace.cards) {
+        const match = mode === 'exact'
+          ? phraseSearchMatch(card.title, card.code, needle)
+          : projectSearchMatch(card.title, card.code, needle)
+        if (!match) continue
+        if (match.field === 'title') {
+          results.push({
+            workspaceId: workspace.id,
+            workspaceTitle: workspace.title,
+            cardId: card.id,
+            cardTitle: card.title,
+            excerpt: card.title,
+            matchField: 'title',
+          })
+          continue
+        }
+        const context = codeExcerpt(card.code, match.index)
+        results.push({
+          workspaceId: workspace.id,
+          workspaceTitle: workspace.title,
+          cardId: card.id,
+          cardTitle: card.title,
+          excerpt: context.excerpt,
+          matchField: 'code',
+          line: context.line,
+        })
+      }
+    }
+    const total = results.length
+    const totalPages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE))
+    const safePage = Math.min(Math.max(1, Number.isFinite(page) ? Math.floor(page) : 1), totalPages)
+    const start = (safePage - 1) * SEARCH_PAGE_SIZE
+    return { items: results.slice(start, start + SEARCH_PAGE_SIZE), total, page: safePage, pageSize: SEARCH_PAGE_SIZE, totalPages }
   }
 
   async createWorkspace(title?: string, folderId?: string): Promise<CodeCardWorkspace> {

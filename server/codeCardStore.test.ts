@@ -43,6 +43,40 @@ describe('CodeCardStore', () => {
     await expect(store.updateWorkspace(workspace)).rejects.toBeInstanceOf(ConflictError)
   })
 
+  it('searches card titles and code using Project-style terms and phrase matching', async () => {
+    const first = await store.createWorkspace('配置工具')
+    const second = await store.createWorkspace('玩家工具')
+    await store.updateWorkspace({
+      ...first,
+      cards: [{ ...first.cards[0]!, title: '读取配置', code: '-- 配置状态\nlocal function GetConfigState()\n  return true\nend' }],
+    })
+    await store.updateWorkspace({
+      ...second,
+      cards: [{ ...second.cards[0]!, title: '查找玩家', code: 'local player = FindPlayerById(playerId)' }],
+    })
+
+    const projectTerms = await store.searchWorkspaces('state get', 1, 'fuzzy')
+    expect(projectTerms.items).toHaveLength(1)
+    expect(projectTerms.items[0]).toMatchObject({ workspaceId: first.id, cardTitle: '读取配置', matchField: 'code', line: 2 })
+
+    const acrossTitleAndCode = await store.searchWorkspaces('读取 "GetConfigState"', 1, 'fuzzy')
+    expect(acrossTitleAndCode.items).toHaveLength(1)
+    expect(acrossTitleAndCode.items[0]).toMatchObject({ workspaceId: first.id, matchField: 'code', line: 2 })
+
+    const quotedPhrase = await store.searchWorkspaces('配置 "local function"', 1, 'fuzzy')
+    expect(quotedPhrase.items).toHaveLength(1)
+    expect(quotedPhrase.items[0]).toMatchObject({ workspaceId: first.id, matchField: 'code', line: 2 })
+
+    const phrase = await store.searchWorkspaces('LOCAL PLAYER', 1, 'exact')
+    expect(phrase.items).toHaveLength(1)
+    expect(phrase.items[0]).toMatchObject({ workspaceId: second.id, cardTitle: '查找玩家', excerpt: 'local player = FindPlayerById(playerId)' })
+
+    expect((await store.searchWorkspaces('gcs', 1, 'fuzzy')).total).toBe(0)
+    expect((await store.searchWorkspaces('gcs', 1, 'exact')).total).toBe(0)
+    expect((await store.searchWorkspaces('读取配', 1, 'exact')).items[0]).toMatchObject({ matchField: 'title' })
+    expect((await store.searchWorkspaces('player config', 1, 'fuzzy')).total).toBe(0)
+  })
+
   it('stores a card thumbnail and removes it with the card', async () => {
     const workspace = await store.createWorkspace()
     const card = workspace.cards[0]!
