@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TranslationEntry } from '../../shared/translation'
 import { translationApi } from '../lib/api'
+import { ActionConfirmationHost } from '../components/ActionConfirmationHost'
 import { TranslationPage } from './TranslationPage'
 
 vi.mock('../lib/api', () => ({ translationApi: { getConfig: vi.fn(), listHistory: vi.fn(), deleteHistory: vi.fn(), translate: vi.fn() } }))
@@ -14,7 +15,7 @@ beforeEach(() => {
   vi.mocked(translationApi.deleteHistory).mockResolvedValue(undefined)
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks() })
-const mount = () => render(<MemoryRouter><TranslationPage /></MemoryRouter>)
+const mount = () => render(<MemoryRouter><TranslationPage /><ActionConfirmationHost /></MemoryRouter>)
 
 describe('translation page', () => {
   it('searches and loads history without issuing a paid translation request', async () => {
@@ -33,12 +34,12 @@ describe('translation page', () => {
   it('requires confirmation before clearing history, and refreshes after deletion', async () => {
     mount()
     await screen.findByRole('button', { name: /你好世界/ })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     fireEvent.click(screen.getByRole('button', { name: '清空历史' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '取消' }))
     expect(translationApi.deleteHistory).not.toHaveBeenCalled()
-    confirm.mockReturnValue(true)
     vi.mocked(translationApi.listHistory).mockResolvedValue([])
     fireEvent.click(screen.getByRole('button', { name: '清空历史' }))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '清空历史' }))
     await waitFor(() => expect(translationApi.deleteHistory).toHaveBeenCalledWith(undefined))
     await screen.findByText('暂无翻译历史')
   })

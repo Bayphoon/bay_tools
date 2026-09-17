@@ -9,6 +9,7 @@ import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../com
 import { useMarkdownViewState } from '../hooks/useMarkdownViewState'
 import { ApiError, assetUrl, localBridge, scannedDocumentContentUrl, scannedDocumentResourceBaseUrl } from '../lib/api'
 import { copyFilePath } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import { createSafeHtmlPreviewDocument, documentEditorLanguage, documentKindLabel, formatDocumentSize, inferDocumentPreviewKind, resolveScannedDocumentLink } from '../lib/documentTypes'
 import { useAppStore } from '../store/appStore'
 import { ManagedMarkdownPage } from './ManagedMarkdownPage'
@@ -154,7 +155,7 @@ function ExternalMarkdownPage() {
   }
   const removeSource = async (source: MarkdownSourceTree) => {
     const displayName = source.note?.trim() || source.label
-    if (!window.confirm(`移除扫描目录 ${displayName}？原文件不会删除。`)) return
+    if (!(await confirmAction(`移除扫描目录 ${displayName}？原文件不会删除。`, { confirmLabel: '移除' }))) return
     await localBridge.removeMarkdownSource(source.id)
     await refreshMarkdown()
   }
@@ -171,7 +172,7 @@ function ExternalMarkdownPage() {
   }
   const renameDocument = async () => {
     if (!document) return
-    if (dirty && !window.confirm('重命名前将丢弃未保存修改，继续吗？')) return
+    if (dirty && !(await confirmAction('重命名前将丢弃未保存修改，继续吗？', { confirmLabel: '继续重命名' }))) return
     const currentName = path.split('/').at(-1) ?? ''
     const nextName = window.prompt('新的文件名（不能修改扩展名）', currentName)
     if (!nextName || nextName === currentName) return
@@ -181,7 +182,7 @@ function ExternalMarkdownPage() {
     } catch (value) { setError(value instanceof Error ? value.message : '重命名失败') }
   }
   const trashDocument = async () => {
-    if (!document || !window.confirm(`将 ${path.split('/').at(-1)} 移入垃圾箱？`)) return
+    if (!document || !(await confirmAction(`将 ${path.split('/').at(-1)} 移入垃圾箱？`, { confirmLabel: '移入垃圾箱' }))) return
     try {
       await localBridge.trashMarkdownDocument(document.sourceId, document.relativePath, document.hash)
       await refreshMarkdown(); navigate('/markdown')

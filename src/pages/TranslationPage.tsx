@@ -5,6 +5,7 @@ import { TRANSLATION_HISTORY_LIMIT, TRANSLATION_LANGUAGES, TRANSLATION_MAX_INPUT
 import { CopyButton, EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { useTranslation } from '../hooks/useTranslation'
 import { translationApi } from '../lib/api'
+import { confirmAction } from '../lib/confirmation'
 import '../translation.css'
 
 export function TranslationPage() {
@@ -41,7 +42,7 @@ export function TranslationPage() {
     if (await translation.translate({ text, sourceLanguage, targetLanguage, model })) await refreshHistory()
   }
   const remove = async (id?: string) => {
-    if (!id && !window.confirm('清空本机所有翻译历史？此操作无法撤销。')) return
+    if (!id && !(await confirmAction('清空本机所有翻译历史？此操作无法撤销。', { confirmLabel: '清空历史' }))) return
     setHistoryBusy(true); setHistoryError('')
     try { await translationApi.deleteHistory(id); await refreshHistory() }
     catch (value) { setHistoryError(value instanceof Error ? value.message : '删除历史失败') }

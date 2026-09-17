@@ -10,6 +10,7 @@ import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, type Fi
 import { ToolButton } from '../components/ui'
 import { ApiError, fileWorkbenchContentUrl, localBridge } from '../lib/api'
 import { copyFilePath, showAppNotice } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import { applyFileExtension, candidatesFromClipboardData, classifyDragTypes, clipboardReadErrorMessage, createImportFile, imageImportExtension, isEditableTarget, readCurrentClipboard, suggestedImportName, textImportExtension, textImportFormatOptions, validateImportFileName, type ClipboardImportCandidate, type DragContentKind, type TextImportFormat } from '../lib/clipboardImport'
 import { useAppStore } from '../store/appStore'
 
@@ -218,12 +219,12 @@ export function FileWorkbenchPage() {
   const totalSize = (library?.items ?? []).reduce((sum, item) => sum + item.size, 0)
 
   const replaceItem = (next: FileWorkbenchItem) => setLibrary((current) => current ? { ...current, items: current.items.map((item) => item.id === next.id ? next : item) } : current)
-  const openFile = (item: FileWorkbenchItem) => {
-    if (descriptionEditingId && descriptionEditingId !== item.id && !window.confirm('文件描述尚未保存，切换文件将丢弃描述草稿，是否继续？')) return
+  const openFile = async (item: FileWorkbenchItem) => {
+    if (descriptionEditingId && descriptionEditingId !== item.id && !(await confirmAction('文件描述尚未保存，切换文件将丢弃描述草稿，是否继续？', { confirmLabel: '切换文件' }))) return
     setDescriptionEditingId(undefined); setOpenIds((ids) => ids.includes(item.id) ? ids : [...ids, item.id]); setActiveId(item.id); setZoom(0); setError('')
   }
-  const closeTab = (id: string, force = false) => {
-    if (!force && (dirtyIds.has(id) || descriptionEditingId === id) && !window.confirm('该文件有未保存的修改，确定关闭吗？')) return
+  const closeTab = async (id: string, force = false) => {
+    if (!force && (dirtyIds.has(id) || descriptionEditingId === id) && !(await confirmAction('该文件有未保存的修改，确定关闭吗？', { confirmLabel: '关闭' }))) return
     const position = openIds.indexOf(id)
     const next = openIds.filter((value) => value !== id)
     setOpenIds(next); if (descriptionEditingId === id) setDescriptionEditingId(undefined); setDirtyIds((values) => { const copy = new Set(values); copy.delete(id); return copy })
@@ -238,13 +239,13 @@ export function FileWorkbenchPage() {
     if (!name || name === item.name) return
     const oldExtension = item.extension.toLowerCase()
     const newExtension = name.includes('.') ? `.${name.split('.').at(-1)!.toLowerCase()}` : ''
-    if (oldExtension !== newExtension && !window.confirm('修改扩展名可能改变文件的预览方式，是否继续？')) return
+    if (oldExtension !== newExtension && !(await confirmAction('修改扩展名可能改变文件的预览方式，是否继续？', { confirmLabel: '继续重命名' }))) return
     await updateMetadata(item, { name })
   }
   const trashItem = async (item: FileWorkbenchItem) => {
     const warning = dirtyIds.has(item.id) ? `将 ${item.name} 移入垃圾箱？未保存的编辑会被丢弃。` : `将 ${item.name} 移入 BayTools 垃圾箱？`
-    if (!window.confirm(warning)) return
-    try { await localBridge.trashFileWorkbenchItem(item.id); closeTab(item.id, true); await refresh(); showAppNotice({ kind: 'success', message: '文件已移入垃圾箱' }) }
+    if (!(await confirmAction(warning, { confirmLabel: '移入垃圾箱' }))) return
+    try { await localBridge.trashFileWorkbenchItem(item.id); await closeTab(item.id, true); await refresh(); showAppNotice({ kind: 'success', message: '文件已移入垃圾箱' }) }
     catch (value) { setError(value instanceof Error ? value.message : '删除失败') }
   }
   const upload = async (files: File[]): Promise<boolean> => {
@@ -262,7 +263,7 @@ export function FileWorkbenchPage() {
       showAppNotice({ kind: 'success', message: `已添加 ${completed} 个文件` })
     } catch (value) { setError(value instanceof Error ? value.message : '文件添加失败') }
     finally {
-      try { await refresh(); if (last) openFile(last) }
+      try { await refresh(); if (last) await openFile(last) }
       catch (value) { setError(value instanceof Error ? value.message : '文件库刷新失败') }
       finally {
         uploadingRef.current = false
@@ -361,12 +362,12 @@ export function FileWorkbenchPage() {
     {error && <div className="file-workbench-error" role="alert">{error}<button aria-label="关闭错误提示" onClick={() => setError('')}><X size={14} /></button></div>}
     <div className="file-workbench-shell">
       <aside className="file-library"><label className="file-library-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索文件名或描述" /></label>
-        <section><button className="file-library-group" onClick={() => setFavoritesOpen((value) => !value)}>{favoritesOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Star size={15} /><strong>收藏文件</strong><span>{favorites.length}</span></button>{favoritesOpen && <div>{favorites.length ? favorites.map((item) => <FileRow key={`favorite-${item.id}`} item={item} active={activeId === item.id} onOpen={() => openFile(item)} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />) : <p className="file-library-empty">收藏的文件会固定显示在这里</p>}</div>}</section>
-        <section><button className="file-library-group" onClick={() => setAllOpen((value) => !value)}>{allOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<FolderOpen size={15} /><strong>全部文件</strong><span>{filtered.length}</span></button>{allOpen && <div>{filtered.map((item) => <FileRow key={item.id} item={item} active={activeId === item.id} onOpen={() => openFile(item)} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />)}</div>}</section>
+        <section><button className="file-library-group" onClick={() => setFavoritesOpen((value) => !value)}>{favoritesOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Star size={15} /><strong>收藏文件</strong><span>{favorites.length}</span></button>{favoritesOpen && <div>{favorites.length ? favorites.map((item) => <FileRow key={`favorite-${item.id}`} item={item} active={activeId === item.id} onOpen={() => { void openFile(item) }} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />) : <p className="file-library-empty">收藏的文件会固定显示在这里</p>}</div>}</section>
+        <section><button className="file-library-group" onClick={() => setAllOpen((value) => !value)}>{allOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<FolderOpen size={15} /><strong>全部文件</strong><span>{filtered.length}</span></button>{allOpen && <div>{filtered.map((item) => <FileRow key={item.id} item={item} active={activeId === item.id} onOpen={() => { void openFile(item) }} onRename={() => void renameItem(item)} onFavorite={() => void updateMetadata(item, { favorite: !item.favorite })} onTrash={() => void trashItem(item)} />)}</div>}</section>
         <button className="file-library-drop" onClick={() => inputRef.current?.click()}><Plus size={14} />拖入或选择文件添加</button>
       </aside>
       <main className="file-workspace-panel">
-        <div className="file-tabs">{openIds.map((id) => { const item = library?.items.find((value) => value.id === id); if (!item) return null; return <button key={id} className={`file-tab ${id === activeId ? 'active' : ''}`} onClick={() => openFile(item)}><FileTypeIcon item={item} size={14} /><span>{item.name}</span>{dirtyIds.has(id) && <i />}<X size={13} onClick={(event) => { event.stopPropagation(); closeTab(id) }} /></button> })}</div>
+        <div className="file-tabs">{openIds.map((id) => { const item = library?.items.find((value) => value.id === id); if (!item) return null; return <button key={id} className={`file-tab ${id === activeId ? 'active' : ''}`} onClick={() => { void openFile(item) }}><FileTypeIcon item={item} size={14} /><span>{item.name}</span>{dirtyIds.has(id) && <i />}<X size={13} onClick={(event) => { event.stopPropagation(); void closeTab(id) }} /></button> })}</div>
         {!activeItem ? <div className="file-workbench-empty"><File size={42} /><h2>{library?.items.length ? '选择文件进行预览' : '将文件拖到这里'}</h2><p>文件会复制到 BayTools 工作台，不会修改或移动源文件。</p><ToolButton className="primary" onClick={() => inputRef.current?.click()}>选择文件</ToolButton></div> : <div className="file-active-workspace">
           <div className="file-active-header"><div><h2>{activeItem.name}</h2><span>{activeItem.extension.slice(1).toUpperCase() || 'FILE'} · {formatSize(activeItem.size)} · 更新于 {new Date(activeItem.updatedAt).toLocaleString()}</span></div><div><ToolButton onClick={() => void updateMetadata(activeItem, { favorite: !activeItem.favorite })}><Star size={14} fill={activeItem.favorite ? 'currentColor' : 'none'} />{activeItem.favorite ? '已收藏' : '收藏'}</ToolButton><ToolButton onClick={() => void renameItem(activeItem)}>重命名</ToolButton><ToolButton onClick={() => void copyFilePath(() => localBridge.getFileWorkbenchItemPath(activeItem.id))}><Copy size={14} />复制路径</ToolButton><ToolButton onClick={() => void localBridge.revealFileWorkbenchItem(activeItem.id)}><FolderOpen size={14} />打开位置</ToolButton><FileMenu item={activeItem} onRename={() => void renameItem(activeItem)} onFavorite={() => void updateMetadata(activeItem, { favorite: !activeItem.favorite })} onTrash={() => void trashItem(activeItem)} /></div></div>
           <DescriptionEditor item={activeItem} onSaved={replaceItem} onEditingChange={(editing) => setDescriptionEditingId(editing ? activeItem.id : undefined)} />

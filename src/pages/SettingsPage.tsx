@@ -6,6 +6,7 @@ import { DeepSeekSettings } from '../components/DeepSeekSettings'
 import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
+import { confirmAction } from '../lib/confirmation'
 import { applyTheme } from '../hooks/useTheme'
 import { useAppStore } from '../store/appStore'
 
@@ -19,6 +20,7 @@ export function SettingsPage() {
   const refreshJson = useAppStore((state) => state.refreshJson)
   const refreshMarkdown = useAppStore((state) => state.refreshMarkdown)
   const refreshManagedMarkdown = useAppStore((state) => state.refreshManagedMarkdown)
+  const refreshCodeCards = useAppStore((state) => state.refreshCodeCards)
   const [draft, setDraft] = useState<AppSettings>(settings)
   const [trash, setTrash] = useState<TrashItem[]>([])
   const [error, setError] = useState('')
@@ -55,7 +57,7 @@ export function SettingsPage() {
     }
   }
   const restartService = async () => {
-    if (!window.confirm('重启期间 BayTools 会短暂断开，未保存的页面内容可能丢失。是否继续？')) return
+    if (!(await confirmAction('重启期间 BayTools 会短暂断开，未保存的页面内容可能丢失。是否继续？', { confirmLabel: '重启服务' }))) return
     setServiceRestarting(true)
     setServiceError('')
     try {
@@ -82,11 +84,11 @@ export function SettingsPage() {
   const restore = async (item: TrashItem, asCopy = false, targetDirectory?: string) => {
     try {
       const result = await localBridge.restoreTrash(item.id, asCopy, targetDirectory)
-      await Promise.all([loadTrash(), refreshJson(), refreshMarkdown(), refreshManagedMarkdown()])
+      await Promise.all([loadTrash(), refreshJson(), refreshMarkdown(), refreshManagedMarkdown(), refreshCodeCards()])
       setError(`已恢复到 ${result.restoredLocation}`)
     } catch (value) {
       if (value instanceof ApiError && value.code === 'RESTORE_CONFLICT') {
-        if (window.confirm('原位置已经存在同名内容，是否恢复为副本？')) await restore(item, true, targetDirectory)
+        if (await confirmAction('原位置已经存在同名内容，是否恢复为副本？', { confirmLabel: '恢复为副本', danger: false })) await restore(item, true, targetDirectory)
       } else if (value instanceof ApiError && value.code === 'RESTORE_DIRECTORY_MISSING') {
         const directory = await localBridge.selectDirectory()
         if (directory) await restore(item, asCopy, directory)
@@ -123,9 +125,9 @@ export function SettingsPage() {
         <section className="settings-section shortcut-note"><strong>后台服务</strong><p>关闭浏览器页签不会停止 BayTools。重新运行快捷方式会检查服务健康状态、API 版本和源码版本，并在需要时自动重启；也可以在这里手动重启。</p><ToolButton disabled={serviceRestarting} onClick={() => void restartService()}><RefreshCw size={14} />{serviceRestarting ? '正在重启' : '重启后台服务'}</ToolButton><InlineError>{serviceError}</InlineError></section>
       </Tabs.Content>
       <Tabs.Content value="trash" className="settings-content">
-        <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`)) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>
+        <div className="section-heading"><div><span className="eyebrow">LOCAL TRASH</span><h2>BayTools 垃圾箱</h2><p>内容不会自动清理，恢复时不会覆盖已有文件。</p></div>{trash.length > 0 && <ToolButton className="danger" onClick={async () => { if (!(await confirmAction(`彻底删除垃圾箱中的 ${trash.length} 项？此操作无法撤销。`, { confirmLabel: '清空垃圾箱' }))) return; await localBridge.emptyTrash(); await loadTrash() }}><Trash2 size={14} />清空垃圾箱</ToolButton>}</div>
         <InlineError>{error}</InlineError>
-        {!trash.length ? <EmptyState title="垃圾箱是空的">删除的 JSON 工作区、文档和工作台文件会出现在这里。</EmptyState> : <div className="trash-list">{trash.map((item) => <article className="trash-item" key={item.id}><div className={`trash-kind ${item.kind}`}>{item.kind === 'json-workspace' ? '{}' : item.kind === 'file-workbench' ? 'FILE' : item.kind === 'scanned-document' ? 'DOC' : 'MD'}</div><div className="trash-main"><strong>{item.displayName}</strong><span className="mono" title={item.originalLocation}>{item.originalLocation}</span><small>{new Date(item.deletedAt).toLocaleString()} · {formatSize(item.size)}</small></div><ToolButton onClick={() => restore(item)}><RotateCcw size={14} />恢复</ToolButton><ToolButton className="danger" onClick={async () => { if (!window.confirm(`彻底删除 ${item.displayName}？此操作无法撤销。`)) return; await localBridge.deleteTrash(item.id); await loadTrash() }}><Trash2 size={14} />彻底删除</ToolButton></article>)}</div>}
+        {!trash.length ? <EmptyState title="垃圾箱是空的">删除的 JSON 工作区、文档、代码段和工作台文件会出现在这里。</EmptyState> : <div className="trash-list">{trash.map((item) => <article className="trash-item" key={item.id}><div className={`trash-kind ${item.kind}`}>{item.kind === 'json-workspace' ? '{}' : item.kind === 'file-workbench' ? 'FILE' : item.kind === 'code-card' ? 'CODE' : item.kind === 'scanned-document' ? 'DOC' : 'MD'}</div><div className="trash-main"><strong>{item.displayName}</strong><span className="mono" title={item.originalLocation}>{item.originalLocation}</span><small>{new Date(item.deletedAt).toLocaleString()} · {formatSize(item.size)}</small></div><ToolButton onClick={() => restore(item)}><RotateCcw size={14} />恢复</ToolButton><ToolButton className="danger" onClick={async () => { if (!(await confirmAction(`彻底删除 ${item.displayName}？此操作无法撤销。`, { confirmLabel: '彻底删除' }))) return; await localBridge.deleteTrash(item.id); await loadTrash() }}><Trash2 size={14} />彻底删除</ToolButton></article>)}</div>}
       </Tabs.Content>
     </Tabs.Root>
   </div>

@@ -9,6 +9,7 @@ import { CopyButton, InlineError, PageHeader, Spinner, ToolButton } from '../com
 import { useAutoFormatJson } from '../hooks/useAutoFormatJson'
 import { ApiError, localBridge } from '../lib/api'
 import { copyFilePath } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import type { JsonDifference } from '../lib/jsonDiff'
 import { useAppStore } from '../store/appStore'
 
@@ -145,17 +146,17 @@ export function JsonWorkspacePage() {
     if (!title || title === pane.title) return
     updatePane(paneId, { title })
   }
-  const clearPane = (paneId: string) => {
+  const clearPane = async (paneId: string) => {
     const pane = workspace?.panes.find((value) => value.id === paneId)
-    if (!pane || !window.confirm(`清空 ${pane.title} 的内容？`)) return
+    if (!pane || !(await confirmAction(`清空 ${pane.title} 的内容？`, { confirmLabel: '清空' }))) return
     updatePane(paneId, { text: '' })
     setDifferences([])
     setMode('split')
   }
-  const removePane = (paneId: string) => {
+  const removePane = async (paneId: string) => {
     const pane = workspace?.panes.find((value) => value.id === paneId)
     if (!workspace || !pane || workspace.panes.length <= JSON_WORKSPACE_MIN_PANES) return
-    if (!window.confirm(`移除 ${pane.title}？其中的内容将从当前工作区删除。`)) return
+    if (!(await confirmAction(`移除 ${pane.title}？其中的内容将从当前工作区删除。`, { confirmLabel: '移除' }))) return
     mutateWorkspace((value) => {
       const panes = value.panes.filter((item) => item.id !== paneId)
       const basePaneId = panes.some((item) => item.id === value.diffSelection.basePaneId) ? value.diffSelection.basePaneId : panes[0]!.id

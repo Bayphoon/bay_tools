@@ -79,10 +79,10 @@ async function runCommand(command, args, label) {
 async function runNpmCi() {
   if (process.platform === 'win32') {
     const shell = process.env.ComSpec || join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe')
-    await runCommand(shell, ['/d', '/s', '/c', 'npm.cmd ci --no-audit --no-fund'], '安装依赖')
+    await runCommand(shell, ['/d', '/s', '/c', 'npm.cmd ci --include=dev --no-audit --no-fund'], '安装依赖')
     return
   }
-  await runCommand('npm', ['ci', '--no-audit', '--no-fund'], '安装依赖')
+  await runCommand('npm', ['ci', '--include=dev', '--no-audit', '--no-fund'], '安装依赖')
 }
 
 async function installDependencies(runId, dependencyVersion) {

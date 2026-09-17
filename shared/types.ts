@@ -272,7 +272,59 @@ export interface FileWorkbenchMetadataPatch {
   metadataRevision: number
 }
 
-export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench'
+export interface CodeCardFolder {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CodeCardWorkspaceSummary {
+  id: string
+  title: string
+  folderId?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CodeCardImage {
+  fileName: string
+  mimeType: 'image/webp' | 'image/png' | 'image/jpeg'
+  size: number
+  width: number
+  height: number
+  updatedAt: string
+}
+
+export interface CodeCard {
+  id: string
+  title: string
+  code: string
+  collapsed: boolean
+  height: number
+  splitRatio: number
+  image?: CodeCardImage
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CodeCardWorkspace extends CodeCardWorkspaceSummary {
+  schemaVersion: 1
+  revision: number
+  cards: CodeCard[]
+}
+
+export interface CodeCardLibrary {
+  schemaVersion: 1
+  revision: number
+  updatedAt: string
+  folders: CodeCardFolder[]
+  workspaces: CodeCardWorkspaceSummary[]
+}
+
+export const CODE_CARD_IMAGE_MAX_UPLOAD_SIZE = 4 * 1024 * 1024
+
+export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench' | 'code-card'
 
 export interface TrashItem {
   id: string
@@ -284,6 +336,7 @@ export interface TrashItem {
   jsonWorkspace?: JsonWorkspaceSummary
   managedDocument?: ManagedMarkdownDocumentSummary
   fileWorkbenchItem?: FileWorkbenchItem
+  codeCardWorkspace?: CodeCardWorkspaceSummary
   deletedAt: string
   size: number
   sha256: string
@@ -420,6 +473,18 @@ export interface LocalBridge {
   trashFileWorkbenchItem(id: string): Promise<void>
   revealFileWorkbenchItem(id: string): Promise<void>
   getFileWorkbenchItemPath(id: string): Promise<string>
+  getCodeCardLibrary(): Promise<CodeCardLibrary>
+  createCodeCardWorkspace(title?: string, folderId?: string): Promise<CodeCardWorkspace>
+  getCodeCardWorkspace(id: string): Promise<CodeCardWorkspace>
+  updateCodeCardWorkspace(workspace: CodeCardWorkspace): Promise<CodeCardWorkspace>
+  renameCodeCardWorkspace(id: string, title: string): Promise<CodeCardWorkspaceSummary>
+  moveCodeCardWorkspace(id: string, folderId?: string): Promise<CodeCardWorkspaceSummary>
+  trashCodeCardWorkspace(id: string): Promise<void>
+  createCodeCardFolder(name?: string): Promise<CodeCardFolder>
+  renameCodeCardFolder(id: string, name: string): Promise<CodeCardFolder>
+  deleteCodeCardFolder(id: string): Promise<void>
+  uploadCodeCardImage(workspaceId: string, cardId: string, image: Blob, width: number, height: number, revision: number): Promise<CodeCardWorkspace>
+  deleteCodeCardImage(workspaceId: string, cardId: string, revision: number): Promise<CodeCardWorkspace>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>
