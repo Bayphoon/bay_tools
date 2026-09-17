@@ -1,8 +1,8 @@
 import Editor from '@monaco-editor/react'
-import { ChevronDown, ChevronUp, ClipboardPaste, Copy, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ClipboardPaste, Copy, ImagePlus, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { useParams } from 'react-router-dom'
-import type { CodeCard, CodeCardWorkspace } from '../../shared/types'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { CodeCard, CodeCardSearchMode, CodeCardSearchPage, CodeCardSearchResult, CodeCardWorkspace } from '../../shared/types'
 import { InlineError, Spinner, ToolButton } from '../components/ui'
 import { codeCardImageUrl, localBridge } from '../lib/api'
 import { showAppNotice } from '../lib/clipboard'
@@ -12,6 +12,7 @@ import { confirmAction } from '../lib/confirmation'
 import { useAppStore } from '../store/appStore'
 
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict'
+const emptySearchPage: CodeCardSearchPage = { items: [], total: 0, page: 1, pageSize: 20, totalPages: 1 }
 
 function newCard(): CodeCard {
   const createdAt = new Date().toISOString()
@@ -20,16 +21,26 @@ function newCard(): CodeCard {
 
 export function CodeCardsPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const targetCardId = searchParams.get('card')
   const refreshCodeCards = useAppStore((state) => state.refreshCodeCards)
   const [workspace, setWorkspace] = useState<CodeCardWorkspace>()
   const [loading, setLoading] = useState(true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [error, setError] = useState<string>()
   const [imageBusyCard, setImageBusyCard] = useState<string>()
+  const [search, setSearch] = useState('')
+  const [searchMode, setSearchMode] = useState<CodeCardSearchMode>('fuzzy')
+  const [searchPage, setSearchPage] = useState(1)
+  const [searchResults, setSearchResults] = useState<CodeCardSearchPage>(emptySearchPage)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const workspaceRef = useRef<CodeCardWorkspace | undefined>(undefined)
   const dirtyRef = useRef(false)
   const editVersionRef = useRef(0)
   const savePromiseRef = useRef<Promise<CodeCardWorkspace | undefined> | undefined>(undefined)
+  const revealedCardRef = useRef('')
 
   useEffect(() => {
     let active = true
@@ -95,6 +106,27 @@ export function CodeCardsPage() {
     return () => window.clearTimeout(timer)
   }, [persist, workspace])
 
+  useEffect(() => {
+    const needle = search.trim()
+    if (!needle) {
+      setSearchResults(emptySearchPage)
+      setSearching(false)
+      setSearchError('')
+      return
+    }
+    let active = true
+    const timer = window.setTimeout(() => {
+      setSearching(true)
+      setSearchError('')
+      void persist().then(() => localBridge.searchCodeCards(needle, searchPage, searchMode)).then((result) => {
+        if (active) setSearchResults(result)
+      }).catch((reason) => {
+        if (active) setSearchError(reason instanceof Error ? reason.message : '代码段搜索失败')
+      }).finally(() => { if (active) setSearching(false) })
+    }, 220)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [persist, search, searchMode, searchPage])
+
   useEffect(() => () => {
     const snapshot = workspaceRef.current
     if (snapshot && dirtyRef.current) void localBridge.updateCodeCardWorkspace(snapshot).catch(() => undefined)
@@ -125,6 +157,18 @@ export function CodeCardsPage() {
     ...current,
     cards: current.cards.map((card) => card.id === cardId ? { ...card, ...patch, updatedAt: new Date().toISOString() } : card),
   }))
+
+  useEffect(() => {
+    if (!workspace || !targetCardId) return
+    const revealKey = `${workspace.id}:${targetCardId}`
+    if (revealedCardRef.current === revealKey) return
+    const card = workspace.cards.find((item) => item.id === targetCardId)
+    if (!card) return
+    revealedCardRef.current = revealKey
+    if (card.collapsed) updateCard(card.id, { collapsed: false })
+    const timer = window.setTimeout(() => document.getElementById(`code-card-${card.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+    return () => window.clearTimeout(timer)
+  }, [targetCardId, workspace?.id])
 
   const addCard = () => mutate((current) => ({ ...current, cards: [...current.cards, newCard()] }))
 
@@ -217,6 +261,10 @@ export function CodeCardsPage() {
     window.addEventListener('pointerup', stop)
   }
 
+  const openSearchResult = (result: CodeCardSearchResult) => {
+    navigate(`/code-cards/${result.workspaceId}?card=${encodeURIComponent(result.cardId)}`)
+  }
+
   if (loading) return <div className="page"><Spinner label="正在加载代码段" /></div>
   if (!workspace) return <div className="page"><InlineError>{error ?? '代码段不存在'}</InlineError></div>
 
@@ -225,9 +273,26 @@ export function CodeCardsPage() {
       <div><input className="code-cards-page-title" value={workspace.title} aria-label="代码段名称" onChange={(event) => mutate((current) => ({ ...current, title: event.target.value }))} /><div className={`save-state ${saveState}`}>{saveState === 'saving' ? '保存中…' : saveState === 'pending' ? '等待保存' : saveState === 'saved' ? '已保存' : saveState === 'conflict' ? '版本冲突' : saveState === 'error' ? '保存失败' : ''}</div></div>
       <ToolButton onClick={addCard}><Plus size={15} />添加卡片</ToolButton>
     </header>
+    <section className="code-card-global-search" aria-label="跨代码段搜索">
+      <div className="code-card-search-controls">
+        <label className="code-card-search-field"><Search size={16} /><input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); setSearchPage(1) }} placeholder="搜索标题或 Lua 文本；空格分词，引号匹配短语" />{search && <button aria-label="清空代码段搜索" onClick={() => { setSearch(''); setSearchPage(1) }}><X size={14} /></button>}</label>
+        <div className="segmented code-card-search-mode" role="group" aria-label="代码段搜索匹配方式"><button title="空格分词，每个关键词都必须连续包含" className={searchMode === 'fuzzy' ? 'active' : undefined} onClick={() => { setSearchMode('fuzzy'); setSearchPage(1) }}>模糊搜索</button><button title="整段内容必须连续包含" className={searchMode === 'exact' ? 'active' : undefined} onClick={() => { setSearchMode('exact'); setSearchPage(1) }}>短语匹配</button></div>
+        <span className="code-card-search-count">{searching ? '搜索中…' : search.trim() ? `${searchResults.total} 条` : '跨页签搜索'}</span>
+      </div>
+      {search.trim() && <div className="code-card-search-results">
+        {searchResults.items.map((result) => <button key={`${result.workspaceId}:${result.cardId}`} className="code-card-search-result" onClick={() => openSearchResult(result)}>
+          <span className="code-card-search-result-path"><strong>{result.workspaceTitle}</strong><ChevronRight size={13} /><span>{result.cardTitle}</span></span>
+          <span className="code-card-search-result-context">{result.matchField === 'title' ? '标题' : `Lua${result.line ? ` · 第 ${result.line} 行` : ''}`}</span>
+          <code>{result.excerpt}</code>
+        </button>)}
+        {!searching && !searchResults.items.length && !searchError && <div className="code-card-search-empty">没有找到匹配的代码段</div>}
+        {searchError && <div className="inline-error">{searchError}</div>}
+        {searchResults.totalPages > 1 && <div className="code-card-search-pagination"><ToolButton disabled={searchResults.page <= 1 || searching} onClick={() => setSearchPage((value) => Math.max(1, value - 1))}><ChevronLeft size={14} />上一页</ToolButton><span>第 {searchResults.page} / {searchResults.totalPages} 页</span><ToolButton disabled={searchResults.page >= searchResults.totalPages || searching} onClick={() => setSearchPage((value) => value + 1)}>下一页<ChevronRight size={14} /></ToolButton></div>}
+      </div>}
+    </section>
     <InlineError>{error}</InlineError>
     <div className="code-card-list">
-      {workspace.cards.map((card) => <article className={`code-card ${card.collapsed ? 'collapsed' : ''}`} key={card.id}>
+      {workspace.cards.map((card) => <article id={`code-card-${card.id}`} className={`code-card ${card.collapsed ? 'collapsed' : ''} ${targetCardId === card.id ? 'located' : ''}`} key={card.id}>
         <header className="code-card-header" title={card.collapsed ? '点击标题栏展开卡片' : '点击标题栏折叠卡片'} onClick={() => updateCard(card.id, { collapsed: !card.collapsed })}>
           <button className="code-card-title-button" title="点击重命名" onClick={(event) => { event.stopPropagation(); renameCard(card) }}><span>{card.title}</span><Pencil size={13} /></button>
           <div className="code-card-actions" onClick={(event) => event.stopPropagation()}>

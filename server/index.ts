@@ -7,7 +7,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, CodeCardWorkspace, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
 import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
@@ -27,7 +27,7 @@ const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
-const apiVersion = 17
+const apiVersion = 18
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -139,6 +139,9 @@ app.get('/api/server-status', async () => serverStatusStore.getState())
 app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) => serverStatusStore.sync(request.body?.url ?? ''))
 
 app.get('/api/code-cards', async () => codeCardStore.getLibrary())
+app.get<{ Querystring: { search?: string; page?: string; mode?: CodeCardSearchMode } }>('/api/code-cards/search', async (request) => {
+  return codeCardStore.searchWorkspaces(request.query.search ?? '', Number(request.query.page ?? 1), request.query.mode ?? 'fuzzy')
+})
 app.post<{ Body: { title?: string; folderId?: string } }>('/api/code-cards/workspaces', async (request) => codeCardStore.createWorkspace(request.body?.title, request.body?.folderId))
 app.get<{ Params: { id: string } }>('/api/code-cards/workspaces/:id', async (request) => codeCardStore.getWorkspace(request.params.id))
 app.put<{ Params: { id: string }; Body: CodeCardWorkspace }>('/api/code-cards/workspaces/:id', async (request) => {

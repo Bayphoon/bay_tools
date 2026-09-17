@@ -46,7 +46,7 @@ npm run build
 - `Doc/color`：最近颜色与收藏颜色。
 - `Doc/language`：多语言来源配置、TXT 缓存与收藏。
 - `Doc/markdown`：扫描目录与阅读器状态；Markdown 原文件仍位于扫描目录。
-- `Doc/code-cards`：代码段分组、页签、卡片内容和压缩后的图片缩略图。
+- `Doc/code-cards`：代码段分组、页签、卡片内容和压缩后的图片缩略图；页面支持 Unity Project 风格的多关键词包含搜索或连续短语匹配。
 - `Doc/trash`：可恢复的 JSON 工作区与 Markdown 文件。
 
 `Doc/.gitignore` 会在所有分支中隔离整个运行目录。切换代码分支不会删除或替换本机数据。Markdown 的彻底删除、垃圾箱清空等操作不可恢复，界面会在执行前要求确认。
