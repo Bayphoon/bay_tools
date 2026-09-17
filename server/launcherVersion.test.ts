@@ -24,7 +24,7 @@ describe('BayTools launcher API compatibility', () => {
     expect(vbsSource).toContain('BayTools.Launcher.ps1')
     expect(commandSource).toContain('BayTools.Launcher.ps1" -Console')
     expect(commandSource).not.toContain('npm.cmd install')
-    expect(workerSource).toContain('npm.cmd ci --no-audit --no-fund')
+    expect(workerSource).toContain('npm.cmd ci --include=dev --no-audit --no-fund')
     expect(workerSource).toContain("node_modules', '.modules.yaml'")
     expect(workerSource).toContain('备份现有 node_modules')
     expect(workerSource.indexOf('stageRoot = await stageBuild')).toBeLessThan(workerSource.indexOf('await stopExistingService'))

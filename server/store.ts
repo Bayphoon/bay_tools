@@ -19,6 +19,8 @@ import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import type {
   AppSettings,
+  CodeCardLibrary,
+  CodeCardWorkspace,
   ColorState,
   FileWorkbenchItem,
   FileWorkbenchLibrary,
@@ -297,6 +299,11 @@ function pathInside(root: string, candidate: string): boolean {
   return value === '' || (!value.startsWith('..') && !isAbsolute(value))
 }
 
+function validateCodeCardImageName(value: string): string {
+  if (!/^[0-9a-f-]{36}-[0-9a-f-]{36}\.(webp|png|jpg)$/i.test(value)) throw new AppError(400, 'INVALID_IMAGE_NAME', '代码段图片文件名无效')
+  return value
+}
+
 export class BayToolsStore {
   readonly root: string
   readonly docRoot: string
@@ -312,6 +319,9 @@ export class BayToolsStore {
   private readonly managedMarkdownFilesRoot: string
   private readonly fileWorkbenchIndexPath: string
   private readonly fileWorkbenchItemsRoot: string
+  private readonly codeCardIndexPath: string
+  private readonly codeCardWorkspaceRoot: string
+  private readonly codeCardImagesRoot: string
   private readonly trashIndexPath: string
   private readonly trashItemsRoot: string
 
@@ -330,6 +340,9 @@ export class BayToolsStore {
     this.managedMarkdownFilesRoot = join(this.docRoot, 'markdown', 'documents', 'files')
     this.fileWorkbenchIndexPath = join(this.docRoot, 'file-workbench', 'index.json')
     this.fileWorkbenchItemsRoot = join(this.docRoot, 'file-workbench', 'items')
+    this.codeCardIndexPath = join(this.docRoot, 'code-cards', 'index.json')
+    this.codeCardWorkspaceRoot = join(this.docRoot, 'code-cards', 'workspaces')
+    this.codeCardImagesRoot = join(this.docRoot, 'code-cards', 'images')
     this.trashIndexPath = join(this.docRoot, 'trash', 'index.json')
     this.trashItemsRoot = join(this.docRoot, 'trash', 'items')
   }
@@ -342,6 +355,8 @@ export class BayToolsStore {
       mkdir(dirname(this.markdownSourcesPath), { recursive: true }),
       mkdir(this.managedMarkdownFilesRoot, { recursive: true }),
       mkdir(this.fileWorkbenchItemsRoot, { recursive: true }),
+      mkdir(this.codeCardWorkspaceRoot, { recursive: true }),
+      mkdir(this.codeCardImagesRoot, { recursive: true }),
     ])
     await recoverAtomicArtifacts(this.docRoot)
     await this.ensureJson(this.settingsPath, defaultSettings())
@@ -1204,6 +1219,52 @@ export class BayToolsStore {
     const item = index.items.find((value) => value.id === id)
     if (!item) throw new AppError(404, 'NOT_FOUND', '垃圾项不存在')
     const itemRoot = join(this.trashItemsRoot, id)
+    if (item.kind === 'code-card') {
+      if (!item.codeCardWorkspace) throw new AppError(500, 'INVALID_TRASH_ITEM', '代码段垃圾项缺少页签信息')
+      const payloadRoot = join(itemRoot, 'payload')
+      const payloadWorkspace = join(payloadRoot, 'workspace.json')
+      if (await hashFile(payloadWorkspace) !== item.sha256) throw new AppError(500, 'RESTORE_VERIFY_FAILED', '垃圾箱中的代码段校验失败')
+      const source = await readJson<CodeCardWorkspace>(payloadWorkspace)
+      const library = await readJson<CodeCardLibrary>(this.codeCardIndexPath)
+      const folderId = source.folderId && library.folders.some((folder) => folder.id === source.folderId) ? source.folderId : undefined
+      const conflict = library.workspaces.some((workspace) => workspace.id === source.id)
+        || await exists(join(this.codeCardWorkspaceRoot, `${source.id}.json`))
+        || await exists(join(this.codeCardImagesRoot, source.id))
+      if (conflict && !asCopy) throw new AppError(409, 'RESTORE_CONFLICT', '同 ID 代码段已经存在')
+      const restoredAt = now()
+      const restored: CodeCardWorkspace = conflict ? {
+        ...source,
+        id: randomUUID(),
+        title: `${source.title}（已恢复）`,
+        ...(folderId ? { folderId } : {}),
+        revision: 1,
+        createdAt: restoredAt,
+        updatedAt: restoredAt,
+      } : { ...source, ...(folderId ? { folderId } : {}), updatedAt: restoredAt }
+      if (!folderId) delete restored.folderId
+      const targetWorkspace = join(this.codeCardWorkspaceRoot, `${restored.id}.json`)
+      const targetImages = join(this.codeCardImagesRoot, restored.id)
+      try {
+        await writeJson(targetWorkspace, restored)
+        const payloadImages = join(payloadRoot, 'images')
+        if (await exists(payloadImages)) await cp(payloadImages, targetImages, { recursive: true })
+        for (const card of restored.cards) {
+          if (!card.image) continue
+          const fileName = validateCodeCardImageName(card.image.fileName)
+          const image = join(targetImages, fileName)
+          if (!(await exists(image)) || (await stat(image)).size !== card.image.size) throw new AppError(500, 'RESTORE_VERIFY_FAILED', '代码段图片恢复校验失败')
+        }
+        library.workspaces.push({ id: restored.id, title: restored.title, ...(folderId ? { folderId } : {}), createdAt: restored.createdAt, updatedAt: restored.updatedAt })
+        library.revision += 1
+        library.updatedAt = restoredAt
+        await writeJson(this.codeCardIndexPath, library)
+      } catch (error) {
+        await Promise.all([rm(targetWorkspace, { force: true }), rm(targetImages, { recursive: true, force: true })])
+        throw error
+      }
+      await this.removeTrashItem(index, item)
+      return { restoredLocation: targetWorkspace, workspaceId: restored.id }
+    }
     if (item.kind === 'json-workspace') {
       const { workspace } = migrateJsonWorkspace(await readJson<JsonWorkspace | LegacyJsonWorkspace>(join(itemRoot, 'payload.json')))
       const jsonIndex = await this.getJsonIndex()

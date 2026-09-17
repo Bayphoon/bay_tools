@@ -9,6 +9,7 @@ import { InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { useMarkdownViewState } from '../hooks/useMarkdownViewState'
 import { ApiError, localBridge } from '../lib/api'
 import { copyFilePath } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import { createSafeHtmlPreviewDocument, documentEditorLanguage } from '../lib/documentTypes'
 import { useAppStore } from '../store/appStore'
 
@@ -105,7 +106,7 @@ export function ManagedMarkdownPage({ documentId }: { documentId: string }) {
     navigate(`/markdown/document/${copy.id}`)
   }
   const trash = async () => {
-    if (!document || !window.confirm(`将 ${document.title} 移入垃圾箱？`)) return
+    if (!document || !(await confirmAction(`将 ${document.title} 移入垃圾箱？`, { confirmLabel: '移入垃圾箱' }))) return
     if (dirty) await save()
     await localBridge.trashManagedMarkdownDocument(document.id)
     await refreshManagedMarkdown()

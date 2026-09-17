@@ -1,11 +1,14 @@
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
+import { ActionConfirmationHost } from './ActionConfirmationHost'
 import { BAYTOOLS_NOTICE_EVENT, type AppNotice } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import { useAppStore } from '../store/appStore'
 
 export function AppLayout() {
+  const navigate = useNavigate()
   const markdownDirty = useAppStore((state) => state.markdownDirty)
   const fileWorkbenchDirty = useAppStore((state) => state.fileWorkbenchDirty)
   const settings = useAppStore((state) => state.settings)
@@ -68,9 +71,13 @@ export function AppLayout() {
     if (!dirty) return
     const target = event.target as HTMLElement
     const link = target.closest('a')
-    if (link && !window.confirm(`${fileWorkbenchDirty ? '当前工作台文件' : '当前 Markdown'}有未保存修改，确定离开吗？`)) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  }}><Sidebar /><div className="sidebar-resize-handle" role="separator" aria-label="调整侧边栏宽度" aria-orientation="vertical" aria-valuemin={200} aria-valuemax={520} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={beginSidebarResize} onDoubleClick={() => { setSidebarWidth(252); persistSidebarWidth(252) }} onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); resizeWithKeyboard(-1) } else if (event.key === 'ArrowRight') { event.preventDefault(); resizeWithKeyboard(1) } }} /><main className="workspace"><Outlet /></main>{notice && <div className={`app-notice ${notice.kind}`} role="status">{notice.kind === 'success' ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}<span>{notice.message}</span></div>}</div>
+    if (!link) return
+    event.preventDefault()
+    event.stopPropagation()
+    void confirmAction(`${fileWorkbenchDirty ? '当前工作台文件' : '当前 Markdown'}有未保存修改，确定离开吗？`, { anchor: link, confirmLabel: '离开' }).then((confirmed) => {
+      if (!confirmed) return
+      const destination = new URL(link.href, window.location.href)
+      navigate(`${destination.pathname}${destination.search}${destination.hash}`)
+    })
+  }}><Sidebar /><div className="sidebar-resize-handle" role="separator" aria-label="调整侧边栏宽度" aria-orientation="vertical" aria-valuemin={200} aria-valuemax={520} aria-valuenow={sidebarWidth} tabIndex={0} onPointerDown={beginSidebarResize} onDoubleClick={() => { setSidebarWidth(252); persistSidebarWidth(252) }} onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); resizeWithKeyboard(-1) } else if (event.key === 'ArrowRight') { event.preventDefault(); resizeWithKeyboard(1) } }} /><main className="workspace"><Outlet /></main>{notice && <div className={`app-notice ${notice.kind}`} role="status">{notice.kind === 'success' ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}<span>{notice.message}</span></div>}<ActionConfirmationHost /></div>
 }

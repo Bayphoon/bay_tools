@@ -1,9 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import type { FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
+import type { CodeCardFolder, CodeCardWorkspaceSummary, FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
 import { copyFilePath } from '../lib/clipboard'
+import { confirmAction } from '../lib/confirmation'
 import { localBridge } from '../lib/api'
 import { inferDocumentPreviewKind, isScannedDocumentActive } from '../lib/documentTypes'
 import { setSidebarGroupCollapsed, sidebarGroupCollapsed } from '../lib/sidebarState'
@@ -65,7 +66,7 @@ function JsonWorkspaceRow({ workspace, folders, onChanged }: { workspace: JsonWo
       await onChanged()
       navigate(`/json/${duplicate.id}`)
     })}<MoveToFolderSubmenu folders={folders} currentFolderId={workspace.folderId} onMove={(folderId) => { void localBridge.moveJsonWorkspace(workspace.id, folderId).then(onChanged) }} />{item('打开文件所在位置', () => { void localBridge.revealJsonWorkspace(workspace.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getJsonWorkspaceFilePath(workspace.id)) })}{item('移入垃圾箱', async () => {
-      if (!window.confirm(`将 ${workspace.title} 移入垃圾箱？`)) return
+      if (!(await confirmAction(`将 ${workspace.title} 移入垃圾箱？`))) return
       await localBridge.trashJsonWorkspace(workspace.id)
       await onChanged()
       navigate('/')
@@ -82,11 +83,46 @@ function JsonFolderSection({ folder, folders, workspaces, collapsed, onToggle, o
       await localBridge.renameJsonFolder(folder.id, name)
       await onChanged()
     })}{item('删除空分组', async () => {
-      if (workspaces.length || !window.confirm(`删除空分组 ${folder.name}？`)) return
+      if (workspaces.length || !(await confirmAction(`删除空分组 ${folder.name}？`))) return
       await localBridge.deleteJsonFolder(folder.id)
       await onChanged()
     }, true)}</Menu></div>
     {open && workspaces.map((workspace) => <JsonWorkspaceRow key={workspace.id} workspace={workspace} folders={folders} onChanged={onChanged} />)}
+  </div>
+}
+
+function CodeCardWorkspaceRow({ workspace, folders, onChanged }: { workspace: CodeCardWorkspaceSummary; folders: CodeCardFolder[]; onChanged: () => Promise<void> }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  return <div className="nav-child-wrap">
+    <NavLink className="nav-tree-row nav-file" to={`/code-cards/${workspace.id}`}><span className="nav-child-dot" aria-hidden="true" /><span>{workspace.title}</span></NavLink>
+    <Menu>{item('重命名', async () => {
+      const title = window.prompt('代码段名称', workspace.title)?.trim()
+      if (!title || title === workspace.title) return
+      await localBridge.renameCodeCardWorkspace(workspace.id, title)
+      await onChanged()
+    })}<MoveToFolderSubmenu folders={folders} currentFolderId={workspace.folderId} onMove={(folderId) => { void localBridge.moveCodeCardWorkspace(workspace.id, folderId).then(onChanged) }} />{item('移入垃圾箱', async () => {
+      if (!(await confirmAction(`将代码段“${workspace.title}”移入垃圾箱？其中的卡片代码和图片会一起移入。`))) return
+      await localBridge.trashCodeCardWorkspace(workspace.id)
+      await onChanged()
+      if (location.pathname === `/code-cards/${workspace.id}`) navigate('/')
+    }, true)}</Menu>
+  </div>
+}
+
+function CodeCardFolderSection({ folder, folders, workspaces, collapsed, onToggle, onCreate, onChanged }: { folder: CodeCardFolder; folders: CodeCardFolder[]; workspaces: CodeCardWorkspaceSummary[]; collapsed: boolean; onToggle: () => void; onCreate: () => Promise<void>; onChanged: () => Promise<void> }) {
+  return <div className="source-tree code-card-folder-tree">
+    <div className="source-title"><button className="source-toggle" aria-expanded={!collapsed} onClick={onToggle}>{collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{collapsed ? <Folder size={14} /> : <FolderOpen size={14} />}<span>{folder.name}</span></button><Menu>{item('新建代码段', () => { void onCreate() })}{item('重命名', async () => {
+      const name = window.prompt('分组名称', folder.name)?.trim()
+      if (!name || name === folder.name) return
+      await localBridge.renameCodeCardFolder(folder.id, name)
+      await onChanged()
+    })}{item('删除空分组', async () => {
+      if (workspaces.length || !(await confirmAction(`删除空分组 ${folder.name}？`))) return
+      await localBridge.deleteCodeCardFolder(folder.id)
+      await onChanged()
+    }, true)}</Menu></div>
+    {!collapsed && workspaces.map((workspace) => <CodeCardWorkspaceRow key={workspace.id} workspace={workspace} folders={folders} onChanged={onChanged} />)}
   </div>
 }
 
@@ -112,7 +148,7 @@ function MarkdownNodes({ sourceId, nodes, collapsedGroups, onToggle, onChanged, 
       await onChanged()
       navigate(`/markdown/${sourceId}?path=${encodeURIComponent(renamed.relativePath)}`)
     })}{item('打开文件所在位置', () => { void localBridge.revealMarkdownDocument(sourceId, node.relativePath) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getMarkdownDocumentFilePath(sourceId, node.relativePath)) })}{item('移入垃圾箱', async () => {
-      if (!window.confirm(`将 ${node.name} 移入 BayTools 垃圾箱？`)) return
+      if (!(await confirmAction(`将 ${node.name} 移入 BayTools 垃圾箱？`))) return
       const document = await localBridge.getMarkdownDocument(sourceId, node.relativePath)
       await localBridge.trashMarkdownDocument(sourceId, node.relativePath, document.hash)
       await onChanged()
@@ -137,7 +173,7 @@ function ManagedDocumentRow({ document, folders, onChanged }: { document: Manage
       await onChanged()
       navigate(`/markdown/document/${duplicate.id}`)
     })}<MoveToFolderSubmenu folders={folders} currentFolderId={document.folderId} onMove={(folderId) => { void localBridge.moveManagedMarkdownDocument(document.id, folderId).then(onChanged) }} />{item('打开文件所在位置', () => { void localBridge.revealManagedMarkdownDocument(document.id) })}{item('复制文件路径', () => { void copyFilePath(() => localBridge.getManagedMarkdownDocumentFilePath(document.id)) })}{item('移入垃圾箱', async () => {
-      if (!window.confirm(`将 ${document.title} 移入 BayTools 垃圾箱？`)) return
+      if (!(await confirmAction(`将 ${document.title} 移入 BayTools 垃圾箱？`))) return
       await localBridge.trashManagedMarkdownDocument(document.id)
       await onChanged()
       if (location.pathname === `/markdown/document/${document.id}`) navigate('/markdown')
@@ -177,7 +213,7 @@ function ManagedMarkdownSection({ library, filter, collapsedGroups, onToggle, on
           await localBridge.renameManagedMarkdownFolder(folder.id, name)
           await onChanged()
         })}{item('删除空分组', async () => {
-          if (documents.length || !window.confirm(`删除空分组 ${folder.name}？`)) return
+          if (documents.length || !(await confirmAction(`删除空分组 ${folder.name}？`))) return
           await localBridge.deleteManagedMarkdownFolder(folder.id)
           await onChanged()
         }, true)}</Menu></div>
@@ -190,7 +226,7 @@ function ManagedMarkdownSection({ library, filter, collapsedGroups, onToggle, on
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, settings } = useAppStore()
+  const { jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, codeCards, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, refreshCodeCards, settings } = useAppStore()
   const [collapsedGroups, setCollapsedGroups] = useState(() => [...(settings?.sidebar.collapsedGroups ?? [])])
   const collapsedGroupsRef = useRef(collapsedGroups)
   const pendingCollapsedGroups = useRef<string[] | undefined>(undefined)
@@ -199,9 +235,11 @@ export function Sidebar() {
   const jsonOpen = !sidebarGroupCollapsed(collapsedGroups, 'json')
   const languageOpen = !sidebarGroupCollapsed(collapsedGroups, 'language')
   const markdownOpen = !sidebarGroupCollapsed(collapsedGroups, 'markdown')
+  const codeCardsOpen = !sidebarGroupCollapsed(collapsedGroups, 'code-cards')
   const jsonActive = location.pathname === '/json' || location.pathname.startsWith('/json/')
   const languageActive = location.pathname === '/language' || location.pathname.startsWith('/language/')
   const markdownActive = location.pathname === '/markdown' || location.pathname.startsWith('/markdown/')
+  const codeCardsActive = location.pathname.startsWith('/code-cards/')
 
   useEffect(() => {
     if (savingCollapsedGroups.current || pendingCollapsedGroups.current || !settings) return
@@ -249,14 +287,14 @@ export function Sidebar() {
 
   const toggleCollapsed = (key: string) => setCollapsed(key, !sidebarGroupCollapsed(collapsedGroupsRef.current, key))
 
-  const setGroupOpen = (group: 'json' | 'language' | 'markdown', nextOpen: boolean) => {
-    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : markdownOpen
+  const setGroupOpen = (group: 'json' | 'language' | 'markdown' | 'code-cards', nextOpen: boolean) => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : codeCardsOpen
     if (open === nextOpen) return
     setCollapsed(group, !nextOpen)
   }
 
-  const toggleGroup = (group: 'json' | 'language' | 'markdown') => {
-    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : markdownOpen
+  const toggleGroup = (group: 'json' | 'language' | 'markdown' | 'code-cards') => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : codeCardsOpen
     setGroupOpen(group, !open)
   }
 
@@ -279,8 +317,8 @@ export function Sidebar() {
     navigate(`/language/${source.id}`)
   }
 
-  const selectGroup = async (group: 'json' | 'language' | 'markdown') => {
-    const active = group === 'json' ? jsonActive : group === 'language' ? languageActive : markdownActive
+  const selectGroup = async (group: 'json' | 'language' | 'markdown' | 'code-cards') => {
+    const active = group === 'json' ? jsonActive : group === 'language' ? languageActive : group === 'markdown' ? markdownActive : codeCardsActive
     if (active) {
       toggleGroup(group)
       return
@@ -289,6 +327,16 @@ export function Sidebar() {
     setGroupOpen(group, true)
     if (group === 'markdown') {
       navigate('/markdown')
+      return
+    }
+    if (group === 'code-cards') {
+      const first = codeCards?.workspaces[0]
+      if (first) navigate(`/code-cards/${first.id}`)
+      else {
+        const workspace = await localBridge.createCodeCardWorkspace()
+        await refreshCodeCards()
+        navigate(`/code-cards/${workspace.id}`)
+      }
       return
     }
     if (group === 'language') {
@@ -327,6 +375,19 @@ export function Sidebar() {
     if (!name) return
     await localBridge.createManagedMarkdownFolder(name)
     await refreshManagedMarkdown()
+  }
+
+  const createCodeCardWorkspace = async (folderId?: string) => {
+    const workspace = await localBridge.createCodeCardWorkspace(undefined, folderId)
+    await refreshCodeCards()
+    navigate(`/code-cards/${workspace.id}`)
+  }
+
+  const createCodeCardFolder = async () => {
+    const name = window.prompt('分组名称', '未命名分组')?.trim()
+    if (!name) return
+    await localBridge.createCodeCardFolder(name)
+    await refreshCodeCards()
   }
 
   const createScannedDocument = async (sourceId: string, relativeDirectory = '') => {
@@ -380,12 +441,25 @@ export function Sidebar() {
             await localBridge.updateMarkdownSourceNote(source.id, note)
             await refreshMarkdown()
           })}{item('刷新扫描', refreshMarkdown)}{item('打开文件所在位置', () => { void localBridge.revealMarkdownSource(source.id) })}{item('移除扫描目录', async () => {
-            if (!window.confirm(`移除扫描目录 ${displayName}？原文件不会删除。`)) return
+            if (!(await confirmAction(`移除扫描目录 ${displayName}？原文件不会删除。`))) return
             await localBridge.removeMarkdownSource(source.id)
             await refreshMarkdown()
           }, true)}</Menu></div>
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : visibleNodes.length ? <MarkdownNodes sourceId={source.id} nodes={visibleNodes} collapsedGroups={collapsedGroups} onToggle={toggleCollapsed} onChanged={refreshMarkdown} onCreate={(relativeDirectory) => createScannedDocument(source.id, relativeDirectory)} /> : <div className="source-empty">当前筛选下没有文件</div>)}
         </div>})}</div>}
+      </div>
+      <div className="nav-group">
+        <div className="nav-parent">
+          <button className={codeCardsActive ? 'active' : undefined} aria-current={codeCardsActive ? 'page' : undefined} aria-expanded={codeCardsOpen} onClick={() => void selectGroup('code-cards')}><span className="nav-root-icon"><PanelsTopLeft size={16} /></span><span>代码段</span>{codeCardsOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <Menu triggerLabel="添加代码段内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建代码段', () => { void createCodeCardWorkspace() })}{item('新建分组', () => { void createCodeCardFolder() })}</Menu>
+        </div>
+        {codeCardsOpen && codeCards && <div className="nav-children">
+          {codeCards.workspaces.filter((workspace) => !workspace.folderId).map((workspace) => <CodeCardWorkspaceRow key={workspace.id} workspace={workspace} folders={codeCards.folders} onChanged={refreshCodeCards} />)}
+          {codeCards.folders.map((folder) => {
+            const key = `code-card-folder:${folder.id}`
+            return <CodeCardFolderSection key={folder.id} folder={folder} folders={codeCards.folders} workspaces={codeCards.workspaces.filter((workspace) => workspace.folderId === folder.id)} collapsed={sidebarGroupCollapsed(collapsedGroups, key)} onToggle={() => toggleCollapsed(key)} onCreate={() => createCodeCardWorkspace(folder.id)} onChanged={refreshCodeCards} />
+          })}
+        </div>}
       </div>
       <NavLink to="/files" className="nav-row"><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
       <NavLink to="/timestamp" className="nav-row"><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
@@ -399,7 +473,7 @@ export function Sidebar() {
         {languageOpen && <div className="nav-children">{languageSources.map((source) => <div className="nav-child-wrap" key={source.id}>
           <NavLink className="nav-tree-row nav-file" to={`/language/${source.id}`}><span className="nav-child-dot" aria-hidden="true" /><span title={source.fileName ?? source.title}>{source.title}</span></NavLink>
           <Menu>{item('删除语种', async () => {
-            if (!window.confirm(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`)) return
+            if (!(await confirmAction(`删除 ${source.title}？将同时删除链接配置、本地 TXT 缓存和该语种的收藏；服务器文件不受影响。`))) return
             await localBridge.deleteLanguageSource(source.id)
             const remaining = languageSources.filter((item) => item.id !== source.id)
             await refreshLanguages()

@@ -1,6 +1,10 @@
 import type {
   ApiFailure,
   AppSettings,
+  CodeCardFolder,
+  CodeCardLibrary,
+  CodeCardWorkspace,
+  CodeCardWorkspaceSummary,
   ColorState,
   FileWorkbenchItem,
   FileWorkbenchLibrary,
@@ -79,6 +83,24 @@ async function uploadFile(file: File): Promise<FileWorkbenchItem> {
     throw new ApiError(response.status, failure.code, failure.details, failure.error)
   }
   return response.json() as Promise<FileWorkbenchItem>
+}
+
+async function uploadCodeCardImage(workspaceId: string, cardId: string, image: Blob, width: number, height: number, revision: number): Promise<CodeCardWorkspace> {
+  const headers = new Headers({
+    'content-type': 'application/octet-stream',
+    'x-baytools-token': await token(),
+    'x-image-type': encodeURIComponent(image.type),
+    'x-image-size': String(image.size),
+    'x-image-width': String(width),
+    'x-image-height': String(height),
+    'x-workspace-revision': String(revision),
+  })
+  const response = await fetch(`/api/code-cards/workspaces/${encodeURIComponent(workspaceId)}/cards/${encodeURIComponent(cardId)}/image`, { method: 'PUT', headers, body: image })
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({ error: response.statusText })) as ApiFailure
+    throw new ApiError(response.status, failure.code, failure.details, failure.error)
+  }
+  return response.json() as Promise<CodeCardWorkspace>
 }
 
 const query = (values: Record<string, string>) => new URLSearchParams(values).toString()
@@ -197,6 +219,18 @@ export const localBridge: LocalBridge = {
   trashFileWorkbenchItem: (id: string) => request<void>(`/api/file-workbench/${id}/trash`, { method: 'POST', body: '{}' }),
   revealFileWorkbenchItem: (id: string) => request<void>(`/api/file-workbench/${id}/reveal`, { method: 'POST', body: '{}' }),
   getFileWorkbenchItemPath: async (id: string) => (await request<{ path: string }>(`/api/file-workbench/${id}/location`)).path,
+  getCodeCardLibrary: () => request<CodeCardLibrary>('/api/code-cards'),
+  createCodeCardWorkspace: (title, folderId) => request<CodeCardWorkspace>('/api/code-cards/workspaces', { method: 'POST', body: JSON.stringify({ title, folderId }) }),
+  getCodeCardWorkspace: (id) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${id}`),
+  updateCodeCardWorkspace: (workspace) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${workspace.id}`, { method: 'PUT', body: JSON.stringify(workspace) }),
+  renameCodeCardWorkspace: (id, title) => request<CodeCardWorkspaceSummary>(`/api/code-cards/workspaces/${id}/title`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  moveCodeCardWorkspace: (id, folderId) => request<CodeCardWorkspaceSummary>(`/api/code-cards/workspaces/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folderId: folderId ?? null }) }),
+  trashCodeCardWorkspace: (id) => request<void>(`/api/code-cards/workspaces/${id}/trash`, { method: 'POST', body: '{}' }),
+  createCodeCardFolder: (name) => request<CodeCardFolder>('/api/code-cards/folders', { method: 'POST', body: JSON.stringify({ name }) }),
+  renameCodeCardFolder: (id, name) => request<CodeCardFolder>(`/api/code-cards/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  deleteCodeCardFolder: (id) => request<void>(`/api/code-cards/folders/${id}`, { method: 'DELETE' }),
+  uploadCodeCardImage,
+  deleteCodeCardImage: (workspaceId, cardId, revision) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${workspaceId}/cards/${cardId}/image`, { method: 'DELETE', body: JSON.stringify({ revision }) }),
   listTrash: () => request<TrashItem[]>('/api/trash'),
   restoreTrash: (id, asCopy, targetDirectory) => request<RestoreResult>(`/api/trash/${id}/restore`, { method: 'POST', body: JSON.stringify({ asCopy, targetDirectory }) }),
   deleteTrash: (id) => request<void>(`/api/trash/${id}`, { method: 'DELETE' }),
@@ -205,6 +239,11 @@ export const localBridge: LocalBridge = {
 
 export function fileWorkbenchContentUrl(id: string, download = false): string {
   return `/api/file-workbench/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`
+}
+
+export function codeCardImageUrl(workspaceId: string, cardId: string, updatedAt?: string): string {
+  const base = `/api/code-cards/workspaces/${encodeURIComponent(workspaceId)}/cards/${encodeURIComponent(cardId)}/image`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
 }
 
 export function scannedDocumentContentUrl(sourceId: string, relativePath: string, download = false): string {

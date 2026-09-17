@@ -7,8 +7,8 @@ import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
-import { FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
+import type { AppSettings, CodeCardWorkspace, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
 import { ServerStatusStore } from './serverStatusStore.js'
@@ -19,13 +19,15 @@ import { parseSingleByteRange } from './fileRange.js'
 import { PersonalDataManager } from './personalData.js'
 import { TranslationStore } from './translationStore.js'
 import { registerTranslationRoutes } from './translationRoutes.js'
+import { CodeCardStore } from './codeCardStore.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
 const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
-const apiVersion = 15
+const codeCardStore = new CodeCardStore(projectRoot)
+const apiVersion = 17
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -135,6 +137,47 @@ app.put<{ Params: { id: string }; Body: { key: string; favorite: boolean; revisi
 
 app.get('/api/server-status', async () => serverStatusStore.getState())
 app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) => serverStatusStore.sync(request.body?.url ?? ''))
+
+app.get('/api/code-cards', async () => codeCardStore.getLibrary())
+app.post<{ Body: { title?: string; folderId?: string } }>('/api/code-cards/workspaces', async (request) => codeCardStore.createWorkspace(request.body?.title, request.body?.folderId))
+app.get<{ Params: { id: string } }>('/api/code-cards/workspaces/:id', async (request) => codeCardStore.getWorkspace(request.params.id))
+app.put<{ Params: { id: string }; Body: CodeCardWorkspace }>('/api/code-cards/workspaces/:id', async (request) => {
+  if (request.params.id !== request.body.id) throw new AppError(400, 'ID_MISMATCH', '代码段 ID 不匹配')
+  return codeCardStore.updateWorkspace(request.body)
+})
+app.patch<{ Params: { id: string }; Body: { title: string } }>('/api/code-cards/workspaces/:id/title', async (request) => codeCardStore.renameWorkspace(request.params.id, request.body.title))
+app.patch<{ Params: { id: string }; Body: { folderId?: string | null } }>('/api/code-cards/workspaces/:id/folder', async (request) => codeCardStore.moveWorkspace(request.params.id, request.body?.folderId ?? undefined))
+app.post<{ Params: { id: string } }>('/api/code-cards/workspaces/:id/trash', async (request, reply) => {
+  await codeCardStore.trashWorkspace(request.params.id)
+  return reply.status(204).send()
+})
+app.post<{ Body: { name?: string } }>('/api/code-cards/folders', async (request) => codeCardStore.createFolder(request.body?.name))
+app.patch<{ Params: { id: string }; Body: { name: string } }>('/api/code-cards/folders/:id', async (request) => codeCardStore.renameFolder(request.params.id, request.body.name))
+app.delete<{ Params: { id: string } }>('/api/code-cards/folders/:id', async (request, reply) => {
+  await codeCardStore.deleteFolder(request.params.id)
+  return reply.status(204).send()
+})
+app.put<{ Params: { workspaceId: string; cardId: string }; Body: Readable; Headers: { 'x-image-type'?: string; 'x-image-size'?: string; 'x-image-width'?: string; 'x-image-height'?: string; 'x-workspace-revision'?: string } }>('/api/code-cards/workspaces/:workspaceId/cards/:cardId/image', {
+  bodyLimit: CODE_CARD_IMAGE_MAX_UPLOAD_SIZE + 1024,
+}, async (request) => {
+  let mimeType = ''
+  try { mimeType = request.headers['x-image-type'] ? decodeURIComponent(request.headers['x-image-type']) : '' } catch { throw new AppError(400, 'INVALID_MIME_TYPE', '图片类型编码无效') }
+  return codeCardStore.uploadImage(request.params.workspaceId, request.params.cardId, request.body || Readable.from([]), {
+    mimeType: mimeType as 'image/webp' | 'image/png' | 'image/jpeg',
+    size: Number(request.headers['x-image-size']),
+    width: Number(request.headers['x-image-width']),
+    height: Number(request.headers['x-image-height']),
+    revision: Number(request.headers['x-workspace-revision']),
+  })
+})
+app.delete<{ Params: { workspaceId: string; cardId: string }; Body: { revision: number } }>('/api/code-cards/workspaces/:workspaceId/cards/:cardId/image', async (request) => codeCardStore.deleteImage(request.params.workspaceId, request.params.cardId, request.body.revision))
+app.get<{ Params: { workspaceId: string; cardId: string } }>('/api/code-cards/workspaces/:workspaceId/cards/:cardId/image', async (request, reply) => {
+  const result = await codeCardStore.getImage(request.params.workspaceId, request.params.cardId)
+  reply.header('x-content-type-options', 'nosniff')
+  reply.header('cache-control', 'no-store')
+  reply.header('content-length', String(result.image.size))
+  return reply.type(result.image.mimeType).send(createReadStream(result.path))
+})
 
 app.get('/api/file-workbench', async () => store.listFileWorkbenchItems())
 app.post<{ Body: Readable; Headers: { 'x-file-name'?: string; 'x-file-type'?: string; 'x-file-size'?: string; 'x-file-last-modified'?: string } }>('/api/file-workbench', {
@@ -368,7 +411,7 @@ export async function buildApp(options?: { serveFrontend?: boolean }) {
   await personalDataManager.autoRestoreIfEmpty()
   // 主存储初始化会清理整个 Doc 下遗留的原子写入临时文件，必须先于其他存储执行。
   await store.init()
-  await Promise.all([languageStore.init(), serverStatusStore.init()])
+  await Promise.all([languageStore.init(), serverStatusStore.init(), codeCardStore.init()])
   if (options?.serveFrontend) await registerFrontend()
   return app
 }

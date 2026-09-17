@@ -20,6 +20,7 @@ export const PERSONAL_DATA_PATHS = [
   'markdown/ui-state.json',
   'markdown/documents',
   'file-workbench',
+  'code-cards',
 ] as const
 
 interface DataDigest {

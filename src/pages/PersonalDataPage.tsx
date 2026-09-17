@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { PersonalDataStatus } from '../../shared/types'
 import { InlineError, PageHeader, ToolButton } from '../components/ui'
 import { localBridge } from '../lib/api'
+import { confirmAction } from '../lib/confirmation'
 
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 
@@ -20,7 +21,7 @@ export function PersonalDataPage() {
   const syncPersonalData = async () => {
     if (!personalData) return
     const force = personalData.state === 'snapshot-newer' || personalData.state === 'diverged'
-    if (force && !window.confirm('分支快照包含尚未恢复的修改。确定用当前本机数据覆盖快照吗？')) return
+    if (force && !(await confirmAction('分支快照包含尚未恢复的修改。确定用当前本机数据覆盖快照吗？', { confirmLabel: '覆盖快照' }))) return
     setBusy('sync')
     setMessage('')
     setError('')
@@ -36,7 +37,7 @@ export function PersonalDataPage() {
   }
 
   const restorePersonalData = async () => {
-    if (!personalData?.snapshotExists || !window.confirm('这会用当前用户分支的快照覆盖本机个人数据，是否继续？')) return
+    if (!personalData?.snapshotExists || !(await confirmAction('这会用当前用户分支的快照覆盖本机个人数据，是否继续？', { confirmLabel: '从分支恢复' }))) return
     setBusy('restore')
     setMessage('')
     setError('')
@@ -54,7 +55,7 @@ export function PersonalDataPage() {
     const force = personalData.state === 'snapshot-newer' || personalData.state === 'diverged'
     const warning = force ? '\n\n分支快照与本机数据存在差异，本次操作将以本机数据覆盖快照。' : ''
     const target = `${personalData.remoteName ?? 'origin'}${personalData.remoteUrl ? ` (${personalData.remoteUrl})` : ''}`
-    if (!window.confirm(`将同步、提交并推送个人数据：\n\n分支：${personalData.branch}\n远端：${target}\n数据：${personalData.fileCount} 个文件，${formatSize(personalData.totalBytes)}\n\n只会提交 UserData/${personalData.user}，但会推送当前分支已有的全部本地提交。${warning}\n\n是否继续？`)) return
+    if (!(await confirmAction(`将同步、提交并推送个人数据：\n分支：${personalData.branch}\n远端：${target}\n数据：${personalData.fileCount} 个文件，${formatSize(personalData.totalBytes)}\n只会提交 UserData/${personalData.user}，但会推送当前分支已有的全部本地提交。${warning}`, { confirmLabel: '提交并推送' }))) return
     setBusy('publish')
     setMessage('')
     setError('')

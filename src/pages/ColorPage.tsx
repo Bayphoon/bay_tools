@@ -4,6 +4,7 @@ import type { ColorState, ColorValue } from '../../shared/types'
 import { CopyButton, EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { convertColor, type ColorInputKind } from '../lib/color'
 import { localBridge } from '../lib/api'
+import { confirmAction } from '../lib/confirmation'
 
 const initial: ColorValue = { hex: '#3B82F6', rgb255: 'rgb(59, 130, 246)', rgb1: 'rgb(0.231, 0.510, 0.965)' }
 
@@ -44,7 +45,7 @@ export function ColorPage() {
       </div>
     </section>
     <section className="list-section"><div className="section-heading"><div><span className="eyebrow">SAVED</span><h2>收藏颜色</h2></div></div>
-      {!state?.saved.length ? <EmptyState title="还没有收藏颜色">把常用的品牌色或主题色保存下来。</EmptyState> : <div className="saved-color-grid">{state.saved.map((record) => <article className="saved-color" key={record.id}><div className="saved-swatch" style={{ background: record.hex }} /><div><button className="record-name" onClick={() => { const name = window.prompt('新的名称', record.name); if (name) void persist({ ...state, saved: state.saved.map((item) => item.id === record.id ? { ...item, name } : item) }) }}>{record.name}</button><span>{record.hex}</span></div><ToolButton onClick={() => apply(record)}>应用</ToolButton><button className="icon-button danger" aria-label="删除收藏" onClick={() => { if (window.confirm(`删除收藏颜色 ${record.name}？`)) void persist({ ...state, saved: state.saved.filter((item) => item.id !== record.id) }) }}><Trash2 size={14} /></button></article>)}</div>}
+      {!state?.saved.length ? <EmptyState title="还没有收藏颜色">把常用的品牌色或主题色保存下来。</EmptyState> : <div className="saved-color-grid">{state.saved.map((record) => <article className="saved-color" key={record.id}><div className="saved-swatch" style={{ background: record.hex }} /><div><button className="record-name" onClick={() => { const name = window.prompt('新的名称', record.name); if (name) void persist({ ...state, saved: state.saved.map((item) => item.id === record.id ? { ...item, name } : item) }) }}>{record.name}</button><span>{record.hex}</span></div><ToolButton onClick={() => apply(record)}>应用</ToolButton><button className="icon-button danger" aria-label="删除收藏" onClick={() => { void (async () => { if (await confirmAction(`删除收藏颜色 ${record.name}？`)) await persist({ ...state, saved: state.saved.filter((item) => item.id !== record.id) }) })() }}><Trash2 size={14} /></button></article>)}</div>}
     </section>
   </div>
 }

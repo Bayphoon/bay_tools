@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { TranslationConfig } from '../../shared/translation'
 import { translationApi } from '../lib/api'
+import { confirmAction } from '../lib/confirmation'
 import { InlineError, ToolButton } from './ui'
 import '../translation.css'
 
@@ -23,7 +24,7 @@ export function DeepSeekSettings() {
     <div className="toolbar">
       <ToolButton className="primary" disabled={!key.trim() || Boolean(busy) || !config?.canSaveKey} onClick={() => void run('save', async () => { setConfig(await translationApi.saveKey(key)); setKey(''); setMessage('密钥已加密保存在本机') })}>{busy === 'save' ? '保存中…' : '保存密钥'}</ToolButton>
       <ToolButton disabled={!config?.configured || Boolean(busy)} onClick={() => void run('test', async () => { setMessage((await translationApi.testConnection()).message) })}>{busy === 'test' ? '正在连接…' : '测试连接'}</ToolButton>
-      <ToolButton className="danger" disabled={!config?.hasLocalKey || Boolean(busy)} onClick={() => { if (window.confirm('删除本机保存的 DeepSeek API Key？')) void run('delete', async () => { setConfig(await translationApi.deleteKey()); setKey(''); setMessage('本机密钥已删除') }) }}>删除密钥</ToolButton>
+      <ToolButton className="danger" disabled={!config?.hasLocalKey || Boolean(busy)} onClick={() => { void (async () => { if (await confirmAction('删除本机保存的 DeepSeek API Key？')) await run('delete', async () => { setConfig(await translationApi.deleteKey()); setKey(''); setMessage('本机密钥已删除') }) })() }}>删除密钥</ToolButton>
     </div>
     <InlineError>{error}</InlineError>{message && <p role="status">{message}</p>}
     <p>点击翻译会将当前原文发送给 DeepSeek，并按其 API 用量计费。历史记录仅保存在本机，只有选中内容再次翻译时才会重新发送。</p>
