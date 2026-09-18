@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Trash2 } from 'lucide-react'
+import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, FileSpreadsheet, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Table2, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { CodeCardFolder, CodeCardWorkspaceSummary, FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -226,7 +226,7 @@ function ManagedMarkdownSection({ library, filter, collapsedGroups, onToggle, on
 export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, codeCards, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, refreshCodeCards, settings } = useAppStore()
+  const { jsonFolders, jsonWorkspaces, languageSources, markdownTrees, managedMarkdown, codeCards, configTables, refreshJson, refreshLanguages, refreshMarkdown, refreshManagedMarkdown, refreshCodeCards, refreshConfigTables, settings } = useAppStore()
   const [collapsedGroups, setCollapsedGroups] = useState(() => [...(settings?.sidebar.collapsedGroups ?? [])])
   const collapsedGroupsRef = useRef(collapsedGroups)
   const pendingCollapsedGroups = useRef<string[] | undefined>(undefined)
@@ -236,10 +236,12 @@ export function Sidebar() {
   const languageOpen = !sidebarGroupCollapsed(collapsedGroups, 'language')
   const markdownOpen = !sidebarGroupCollapsed(collapsedGroups, 'markdown')
   const codeCardsOpen = !sidebarGroupCollapsed(collapsedGroups, 'code-cards')
+  const configTablesOpen = !sidebarGroupCollapsed(collapsedGroups, 'config-tables')
   const jsonActive = location.pathname === '/json' || location.pathname.startsWith('/json/')
   const languageActive = location.pathname === '/language' || location.pathname.startsWith('/language/')
   const markdownActive = location.pathname === '/markdown' || location.pathname.startsWith('/markdown/')
   const codeCardsActive = location.pathname.startsWith('/code-cards/')
+  const configTablesActive = location.pathname === '/config-tables' || location.pathname.startsWith('/config-tables/')
 
   useEffect(() => {
     if (savingCollapsedGroups.current || pendingCollapsedGroups.current || !settings) return
@@ -287,14 +289,14 @@ export function Sidebar() {
 
   const toggleCollapsed = (key: string) => setCollapsed(key, !sidebarGroupCollapsed(collapsedGroupsRef.current, key))
 
-  const setGroupOpen = (group: 'json' | 'language' | 'markdown' | 'code-cards', nextOpen: boolean) => {
-    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : codeCardsOpen
+  const setGroupOpen = (group: 'json' | 'language' | 'markdown' | 'code-cards' | 'config-tables', nextOpen: boolean) => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : group === 'code-cards' ? codeCardsOpen : configTablesOpen
     if (open === nextOpen) return
     setCollapsed(group, !nextOpen)
   }
 
-  const toggleGroup = (group: 'json' | 'language' | 'markdown' | 'code-cards') => {
-    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : codeCardsOpen
+  const toggleGroup = (group: 'json' | 'language' | 'markdown' | 'code-cards' | 'config-tables') => {
+    const open = group === 'json' ? jsonOpen : group === 'language' ? languageOpen : group === 'markdown' ? markdownOpen : group === 'code-cards' ? codeCardsOpen : configTablesOpen
     setGroupOpen(group, !open)
   }
 
@@ -317,14 +319,18 @@ export function Sidebar() {
     navigate(`/language/${source.id}`)
   }
 
-  const selectGroup = async (group: 'json' | 'language' | 'markdown' | 'code-cards') => {
-    const active = group === 'json' ? jsonActive : group === 'language' ? languageActive : group === 'markdown' ? markdownActive : codeCardsActive
+  const selectGroup = async (group: 'json' | 'language' | 'markdown' | 'code-cards' | 'config-tables') => {
+    const active = group === 'json' ? jsonActive : group === 'language' ? languageActive : group === 'markdown' ? markdownActive : group === 'code-cards' ? codeCardsActive : configTablesActive
     if (active) {
       toggleGroup(group)
       return
     }
 
     setGroupOpen(group, true)
+    if (group === 'config-tables') {
+      navigate('/config-tables')
+      return
+    }
     if (group === 'markdown') {
       navigate('/markdown')
       return
@@ -462,6 +468,26 @@ export function Sidebar() {
         </div>}
       </div>
       <NavLink to="/files" className="nav-row"><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
+      <div className="nav-group">
+        <div className="nav-parent">
+          <button className={configTablesActive ? 'active' : undefined} aria-current={configTablesActive ? 'page' : undefined} aria-expanded={configTablesOpen} onClick={() => void selectGroup('config-tables')}><span className="nav-root-icon"><Table2 size={16} /></span><span>配置表</span>{configTablesOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
+          <Menu triggerLabel="配置表操作" alwaysVisible>{item('刷新本地分支列表', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.refreshConfigTableLocal() }) } catch (error) { window.alert(error instanceof Error ? error.message : '刷新失败') }
+          })}{item('同步远程分支列表', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.syncConfigTableRemote() }) } catch (error) { window.alert(error instanceof Error ? error.message : '同步失败') }
+          })}</Menu>
+        </div>
+        {configTablesOpen && <div className="nav-children">{configTables?.branches.map((branch) => <div className="nav-child-wrap" key={branch.name}>
+          <NavLink className={`nav-tree-row nav-file ${branch.local ? '' : 'remote-only'}`} to={`/config-tables/${encodeURIComponent(branch.name)}`}><FileSpreadsheet size={13} /><span title={branch.local ? branch.name : `${branch.name}（远程，未下载）`}>{branch.name}</span></NavLink>
+          <Menu>{branch.local ? <>{item('SVN 更新当前分支', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : 'SVN 更新失败') }
+          })}{item('重新扫描内容', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.scanConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : '扫描失败') }
+          })}{item('打开分支目录', () => { void localBridge.revealConfigTableBranch(branch.name) })}</> : item('下载分支', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.downloadConfigTableBranch(branch.name) }); await refreshConfigTables() } catch (error) { window.alert(error instanceof Error ? error.message : '下载失败') }
+          })}</Menu>
+        </div>)}</div>}
+      </div>
       <NavLink to="/timestamp" className="nav-row"><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
       <NavLink to="/color" className="nav-row"><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>
       <NavLink to="/translation" className="nav-row"><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>

@@ -226,6 +226,73 @@ export interface ServerStatusState {
   servers: ServerStatusRecord[]
 }
 
+export type ConfigTableSearchMode = 'tokens' | 'exact'
+
+export interface ConfigTableBranch {
+  name: string
+  local: boolean
+  remote: boolean
+  fileCount?: number
+  lastScannedAt?: string
+}
+
+export interface ConfigTableState {
+  schemaVersion: 1
+  updatedAt: string
+  revision: number
+  rootPath: string
+  localRefreshedAt?: string
+  remoteSyncedAt?: string
+  branches: ConfigTableBranch[]
+}
+
+export interface ConfigTableFile {
+  branch: string
+  name: string
+  relativePath: string
+  size: number
+  updatedAt: string
+}
+
+export interface ConfigTableFilePage {
+  items: ConfigTableFile[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface ConfigTableSheet {
+  name: string
+  rowCount: number
+  columnCount: number
+}
+
+export interface ConfigTableWorkbook {
+  branch: string
+  name: string
+  relativePath: string
+  size: number
+  updatedAt: string
+  sheets: ConfigTableSheet[]
+}
+
+export interface ConfigTableRange {
+  sheet: string
+  startRow: number
+  startColumn: number
+  rowCount: number
+  columnCount: number
+  values: string[][]
+}
+
+export interface ConfigTableCellMatch {
+  row: number
+  column: number
+  address: string
+  text: string
+}
+
 export type FileWorkbenchPreviewKind = 'text' | 'markdown' | 'pdf' | 'image' | 'binary'
 export const FILE_WORKBENCH_TEXT_EDIT_LIMIT = 10 * 1024 * 1024
 export const FILE_WORKBENCH_MAX_UPLOAD_SIZE = 512 * 1024 * 1024
@@ -485,6 +552,22 @@ export interface LocalBridge {
   setLanguageFavorite(id: string, key: string, favorite: boolean, revision: number): Promise<LanguageSource>
   getServerStatus(): Promise<ServerStatusState>
   syncServerStatus(url: string): Promise<ServerStatusState>
+  getConfigTableState(): Promise<ConfigTableState>
+  setConfigTableRoot(path: string): Promise<ConfigTableState>
+  refreshConfigTableLocal(): Promise<ConfigTableState>
+  syncConfigTableRemote(): Promise<ConfigTableState>
+  scanConfigTableBranch(branch: string): Promise<ConfigTableState>
+  updateConfigTableBranch(branch: string): Promise<ConfigTableState>
+  downloadConfigTableBranch(branch: string): Promise<ConfigTableState>
+  searchConfigTableFiles(branch: string, includeDev: boolean, search: string, mode: ConfigTableSearchMode, page: number): Promise<ConfigTableFilePage>
+  getConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
+  refreshConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
+  getConfigTableRange(branch: string, relativePath: string, sheet: string, startRow: number, rowCount: number, startColumn: number, columnCount: number): Promise<ConfigTableRange>
+  searchConfigTableCells(branch: string, relativePath: string, sheet: string, search: string): Promise<ConfigTableCellMatch[]>
+  revealConfigTableFile(branch: string, relativePath: string): Promise<void>
+  revealConfigTableBranch(branch: string): Promise<void>
+  openConfigTableFile(branch: string, relativePath: string): Promise<void>
+  getConfigTableFilePath(branch: string, relativePath: string): Promise<string>
   listFileWorkbenchItems(): Promise<FileWorkbenchLibrary>
   uploadFileWorkbenchFile(file: File): Promise<FileWorkbenchItem>
   updateFileWorkbenchMetadata(id: string, patch: FileWorkbenchMetadataPatch): Promise<FileWorkbenchItem>

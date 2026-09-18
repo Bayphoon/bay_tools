@@ -376,6 +376,94 @@ a { color: inherit; text-decoration: none; }
 .empty-state p { margin: 0; font-size: 12px; }
 .empty-icon { font-size: 25px; color: var(--border); }
 
+/* Configuration table viewer */
+.nav-tree-row.remote-only { opacity: .7; font-style: italic; }
+.config-table-page { color: var(--text); }
+.config-table-home { min-height: 100%; }
+.config-root-panel { display: flex; align-items: center; gap: 18px; padding: 15px 17px; }
+.config-root-panel > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.config-root-panel strong { font-size: 13px; }
+.config-root-panel span { overflow: hidden; color: var(--muted); font: 12px "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.config-branch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 10px; margin-top: 15px; }
+.config-branch-card { min-width: 0; min-height: 78px; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.config-branch-card.remote-only { border-style: dashed; }
+.config-branch-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 7px; background: color-mix(in srgb, var(--accent) 12%, var(--surface-2)); color: var(--accent); }
+.config-branch-card > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.config-branch-card strong, .config-branch-card span, .config-branch-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-branch-card strong { font-size: 14px; }
+.config-branch-card span { color: var(--muted); font-size: 12px; }
+.config-branch-card small { color: var(--muted); font-size: 10px; }
+.config-branch-page { width: 100%; height: 100%; min-height: 620px; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.config-branch-header { flex: 0 0 62px; display: flex; align-items: center; gap: 16px; padding: 9px 15px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.config-branch-header > div { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.config-branch-header > div:first-child { flex: 1; }
+.config-branch-header a { color: var(--muted); font-size: 12px; }
+.config-branch-header a:hover { color: var(--accent); }
+.config-branch-header h1 { overflow: hidden; margin: 0; font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
+.config-branch-header span { color: var(--muted); font-size: 11px; }
+.config-page-error { flex: 0 0 auto; min-height: 34px; display: flex; align-items: center; padding: 5px 12px; background: color-mix(in srgb, var(--danger) 12%, var(--surface)); color: var(--danger); font-size: 12px; }
+.config-page-error button { margin-left: auto; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.config-branch-shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px minmax(0, 1fr); }
+.config-file-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 86%, var(--bg)); }
+.config-file-search { flex: 0 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px; border-bottom: 1px solid var(--border); }
+.config-file-search select { min-width: 0; height: 31px; border: 1px solid var(--border); border-radius: 5px; padding: 0 6px; outline: none; background: var(--bg); color: var(--text); font-size: 11px; }
+.config-file-search label { grid-column: 1 / -1; height: 33px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--muted); }
+.config-file-search label:focus-within, .config-file-search select:focus { border-color: var(--accent); }
+.config-file-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
+.config-file-summary { flex: 0 0 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.config-file-list { flex: 1; min-height: 0; overflow-y: auto; padding: 5px; }
+.config-file-row { min-height: 61px; display: grid; grid-template-columns: 22px minmax(0, 1fr) 25px 25px; align-items: center; gap: 4px; margin-bottom: 2px; padding: 6px 4px 6px 7px; border-radius: 6px; color: var(--muted); cursor: pointer; }
+.config-file-row:hover, .config-file-row.active { background: var(--surface-hover); }
+.config-file-row.active { box-shadow: inset 2px 0 var(--accent); }
+.config-file-row > svg { color: var(--accent); }
+.config-file-row > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.config-file-row strong, .config-file-row span, .config-file-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-file-row strong { color: var(--text); font-size: 12px; }
+.config-file-row span { font-size: 10px; }
+.config-file-row small { font-size: 9px; }
+.config-file-row > button { width: 24px; height: 25px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.config-file-row > button:hover { background: var(--surface-2); color: var(--text); }
+.config-file-pagination { flex: 0 0 34px; display: flex; align-items: center; justify-content: center; gap: 9px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.config-file-pagination button, .config-workbook-toolbar > button { width: 26px; height: 25px; display: grid; place-items: center; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); cursor: pointer; }
+.config-file-pagination button:disabled, .config-workbook-toolbar > button:disabled { opacity: .35; cursor: default; }
+.config-viewer-panel { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.config-workbook-viewer { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.config-viewer-loading { flex: 1; display: grid; place-items: center; }
+.config-workbook-header { flex: 0 0 61px; display: flex; align-items: center; gap: 12px; padding: 8px 11px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.config-workbook-header > div:first-child { min-width: 0; flex: 1; }
+.config-workbook-header h2 { overflow: hidden; margin: 0 0 4px; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.config-workbook-header span { display: block; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.config-workbook-header > div:last-child { display: flex; gap: 5px; }
+.config-workbook-toolbar { flex: 0 0 39px; display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 10px; }
+.config-cell-search { width: min(360px, 45%); height: 29px; display: flex; align-items: center; gap: 6px; padding-left: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
+.config-cell-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
+.config-cell-search button { align-self: stretch; border: 0; border-left: 1px solid var(--border); padding: 0 9px; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.config-selected-cell { min-width: 0; max-width: 380px; height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); cursor: pointer; }
+.config-selected-cell strong { color: var(--accent); font-size: 10px; }
+.config-selected-cell span { overflow: hidden; color: var(--muted); font: 10px "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.config-sheet-tabs { flex: 0 0 34px; display: flex; align-items: stretch; overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--surface); }
+.config-sheet-tabs button { min-width: 92px; max-width: 220px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
+.config-sheet-tabs button.active { background: var(--bg); color: var(--text); box-shadow: inset 0 2px var(--accent); }
+.config-sheet-tabs button span { color: var(--muted); font-size: 9px; }
+.config-sheet-area { flex: 1; min-width: 0; min-height: 0; display: flex; overflow: hidden; }
+.config-grid-wrap { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
+.config-grid-viewport { width: 100%; height: 100%; overflow: auto; }
+.config-grid-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.config-grid-cell, .config-grid-column-header, .config-grid-row-header, .config-grid-corner { position: absolute; }
+.config-grid-cell { width: 148px; height: 28px; overflow: hidden; padding: 0 7px; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg); color: var(--text); font: 11px/28px "Cascadia Code", Consolas, monospace; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.config-grid-cell:hover { z-index: 2; background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--accent); }
+.config-grid-cell.search-match { z-index: 2; background: color-mix(in srgb, var(--warning) 15%, var(--bg)); box-shadow: inset 0 0 0 2px var(--warning); }
+.config-grid-column-header { z-index: 5; width: 148px; height: 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font: 10px/30px "Cascadia Code", Consolas, monospace; text-align: center; }
+.config-grid-row-header { z-index: 4; width: 54px; height: 28px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font: 10px/28px "Cascadia Code", Consolas, monospace; text-align: center; }
+.config-grid-corner { z-index: 7; width: 54px; height: 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.config-grid-loading { position: absolute; right: 13px; bottom: 12px; z-index: 10; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--muted); font-size: 10px; box-shadow: 0 4px 14px color-mix(in srgb, #000 22%, transparent); }
+.config-grid-error { position: absolute; left: 50%; top: 12px; z-index: 20; max-width: 560px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border)); border-radius: 5px; background: var(--surface); color: var(--danger); font-size: 11px; transform: translateX(-50%); }
+
+@media (max-width: 1150px) {
+  .config-branch-shell { grid-template-columns: 280px minmax(0, 1fr); }
+  .config-workbook-header .tool-button:first-child { font-size: 0; }
+}
+
 .json-page .page-header, .markdown-page .page-header { flex: 0 0 auto; margin-bottom: 10px; }
 .json-page .page-header { min-height: 0; align-items: flex-start; margin-bottom: 8px; }
 .save-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
