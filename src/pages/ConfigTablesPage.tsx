@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight, ClipboardCopy, Download, ExternalLink, FileSpreadsheet, FolderOpen, RefreshCw, Search, Table2 } from 'lucide-react'
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { ConfigTableCellMatch, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
 import { EmptyState, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { copyFilePath, showAppNotice } from '../lib/clipboard'
+import { clampFrozenCount, configTableRangeRequests, configTableRangeValue, MAX_FROZEN_COLUMNS, MAX_FROZEN_ROWS, visibleGridIndexes } from '../lib/configTableViewport'
 import { localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 
@@ -33,24 +34,27 @@ function columnLabel(column: number): string {
   return label
 }
 
-function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, onSelect }: {
+function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selectedAddress, frozenRows, frozenColumns, onSelect }: {
   branch: string
   relativePath: string
   sheet: ConfigTableSheet
   refreshKey: number
   target?: ConfigTableCellMatch
+  selectedAddress?: string
+  frozenRows: number
+  frozenColumns: number
   onSelect: (cell: { address: string; text: string }) => void
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ top: 0, left: 0 })
-  const [range, setRange] = useState<ConfigTableRange>()
+  const [ranges, setRanges] = useState<ConfigTableRange[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
   const startRow = Math.max(1, Math.floor(Math.max(0, position.top - COLUMN_HEADER_HEIGHT) / ROW_HEIGHT) + 1 - 12)
   const startColumn = Math.max(1, Math.floor(Math.max(0, position.left - ROW_HEADER_WIDTH) / COLUMN_WIDTH) + 1 - 3)
 
   useEffect(() => {
-    setRange(undefined)
+    setRanges([])
     setPosition({ top: 0, left: 0 })
     if (viewportRef.current) viewportRef.current.scrollTo({ top: 0, left: 0 })
   }, [branch, relativePath, sheet.name])
@@ -59,8 +63,9 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, onSelec
     let cancelled = false
     const timer = window.setTimeout(() => {
       setLoading(true)
-      void localBridge.getConfigTableRange(branch, relativePath, sheet.name, startRow, 100, startColumn, 30).then((next) => {
-        if (!cancelled) { setRange(next); setError(undefined) }
+      const requests = configTableRangeRequests(startRow, startColumn, frozenRows, frozenColumns)
+      void Promise.all(requests.map((request) => localBridge.getConfigTableRange(branch, relativePath, sheet.name, request.startRow, request.rowCount, request.startColumn, request.columnCount))).then((next) => {
+        if (!cancelled) { setRanges(next); setError(undefined) }
       }).catch((nextError) => {
         if (!cancelled) setError(errorMessage(nextError))
       }).finally(() => {
@@ -68,28 +73,22 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, onSelec
       })
     }, 80)
     return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [branch, relativePath, sheet.name, startRow, startColumn, refreshKey])
+  }, [branch, relativePath, sheet.name, startRow, startColumn, frozenRows, frozenColumns, refreshKey])
 
   useEffect(() => {
     if (!target || !viewportRef.current) return
     viewportRef.current.scrollTo({
-      top: Math.max(0, (target.row - 1) * ROW_HEIGHT - ROW_HEIGHT * 3),
-      left: Math.max(0, (target.column - 1) * COLUMN_WIDTH - COLUMN_WIDTH * 2),
+      top: Math.max(0, (target.row - 1) * ROW_HEIGHT - ROW_HEIGHT * (frozenRows + 3)),
+      left: Math.max(0, (target.column - 1) * COLUMN_WIDTH - COLUMN_WIDTH * (frozenColumns + 2)),
       behavior: 'smooth',
     })
     onSelect({ address: target.address, text: target.text })
-  }, [target, onSelect])
+  }, [target, frozenRows, frozenColumns, onSelect])
 
   const visibleStartRow = Math.max(1, Math.floor(Math.max(0, position.top - COLUMN_HEADER_HEIGHT) / ROW_HEIGHT) + 1)
   const visibleStartColumn = Math.max(1, Math.floor(Math.max(0, position.left - ROW_HEADER_WIDTH) / COLUMN_WIDTH) + 1)
-  const visibleRows = Array.from({ length: Math.max(0, Math.min(46, sheet.rowCount - visibleStartRow + 1)) }, (_, index) => visibleStartRow + index)
-  const visibleColumns = Array.from({ length: Math.max(0, Math.min(18, sheet.columnCount - visibleStartColumn + 1)) }, (_, index) => visibleStartColumn + index)
-  const valueAt = (row: number, column: number) => {
-    if (!range) return ''
-    const rowOffset = row - range.startRow
-    const columnOffset = column - range.startColumn
-    return range.values[rowOffset]?.[columnOffset] ?? ''
-  }
+  const visibleRows = visibleGridIndexes(visibleStartRow, 46, frozenRows, sheet.rowCount)
+  const visibleColumns = visibleGridIndexes(visibleStartColumn, 18, frozenColumns, sheet.columnCount)
 
   if (!sheet.rowCount || !sheet.columnCount) return <EmptyState title="工作表为空"><span>该 Sheet 没有可显示的单元格。</span></EmptyState>
 
@@ -98,13 +97,23 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, onSelec
     <div ref={viewportRef} className="config-grid-viewport" onScroll={(event) => setPosition({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })}>
       <div className="config-grid-canvas" style={{ width: ROW_HEADER_WIDTH + sheet.columnCount * COLUMN_WIDTH, height: COLUMN_HEADER_HEIGHT + sheet.rowCount * ROW_HEIGHT }}>
         <div className="config-grid-corner" style={{ top: position.top, left: position.left }} />
-        {visibleColumns.map((column) => <div key={`header-${column}`} className="config-grid-column-header" style={{ top: position.top, left: ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }}>{columnLabel(column)}</div>)}
-        {visibleRows.map((row) => <div key={`row-${row}`} className="config-grid-row-header" style={{ top: COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: position.left }}>{row}</div>)}
+        {visibleColumns.map((column) => {
+          const frozen = column <= frozenColumns
+          return <div key={`header-${column}`} className={`config-grid-column-header ${frozen ? 'frozen-column' : ''} ${column === frozenColumns ? 'freeze-column-edge' : ''}`} style={{ top: position.top, left: (frozen ? position.left : 0) + ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }}>{columnLabel(column)}</div>
+        })}
+        {visibleRows.map((row) => {
+          const frozen = row <= frozenRows
+          return <div key={`row-${row}`} className={`config-grid-row-header ${frozen ? 'frozen-row' : ''} ${row === frozenRows ? 'freeze-row-edge' : ''}`} style={{ top: (frozen ? position.top : 0) + COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: position.left }}>{row}</div>
+        })}
         {visibleRows.flatMap((row) => visibleColumns.map((column) => {
-          const text = valueAt(row, column)
+          const text = configTableRangeValue(ranges, row, column)
           const address = `${columnLabel(column)}${row}`
-          const selected = target?.row === row && target.column === column
-          return <button key={`${row}-${column}`} className={`config-grid-cell ${selected ? 'search-match' : ''}`} style={{ top: COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }} title={text} onClick={() => onSelect({ address, text })}>{text}</button>
+          const frozenRow = row <= frozenRows
+          const frozenColumn = column <= frozenColumns
+          const searchMatch = target?.row === row && target.column === column
+          const selected = selectedAddress === address
+          const className = ['config-grid-cell', frozenRow ? 'frozen-row' : '', frozenColumn ? 'frozen-column' : '', row === frozenRows ? 'freeze-row-edge' : '', column === frozenColumns ? 'freeze-column-edge' : '', searchMatch ? 'search-match' : '', selected ? 'selected' : ''].filter(Boolean).join(' ')
+          return <button key={`${row}-${column}`} className={className} style={{ top: (frozenRow ? position.top : 0) + COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: (frozenColumn ? position.left : 0) + ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }} title={text} onClick={() => onSelect({ address, text })}>{text}</button>
         }))}
       </div>
     </div>
@@ -112,7 +121,7 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, onSelec
   </div>
 }
 
-function WorkbookViewer({ file }: { file: ConfigTableFile }) {
+export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const [workbook, setWorkbook] = useState<ConfigTableWorkbook>()
   const [sheetName, setSheetName] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
@@ -122,6 +131,7 @@ function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const [matches, setMatches] = useState<ConfigTableCellMatch[]>([])
   const [matchIndex, setMatchIndex] = useState(-1)
   const [selectedCell, setSelectedCell] = useState<{ address: string; text: string }>()
+  const [frozenBySheet, setFrozenBySheet] = useState<Record<string, { rows: number; columns: number }>>({})
 
   const load = async (force = false) => {
     setLoading(true)
@@ -147,12 +157,42 @@ function WorkbookViewer({ file }: { file: ConfigTableFile }) {
     setMatches([])
     setMatchIndex(-1)
     setSelectedCell(undefined)
+    setFrozenBySheet({})
     void load()
     // The file identity is the intended reload boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.branch, file.relativePath])
 
   const activeSheet = workbook?.sheets.find((sheet) => sheet.name === sheetName)
+  const frozen = frozenBySheet[sheetName] ?? { rows: 0, columns: 0 }
+  const updateFrozen = (field: 'rows' | 'columns', value: number) => {
+    if (!activeSheet) return
+    const maximum = field === 'rows' ? MAX_FROZEN_ROWS : MAX_FROZEN_COLUMNS
+    const total = field === 'rows' ? activeSheet.rowCount : activeSheet.columnCount
+    setFrozenBySheet((current) => ({ ...current, [sheetName]: { ...frozen, [field]: clampFrozenCount(value, total, maximum) } }))
+  }
+  const copySelectedCell = useCallback(async () => {
+    if (!selectedCell) return
+    try {
+      await navigator.clipboard.writeText(selectedCell.text)
+      showAppNotice({ message: `${selectedCell.address} 单元格内容已复制`, kind: 'success' })
+    } catch (copyError) {
+      showAppNotice({ message: errorMessage(copyError), kind: 'error' })
+    }
+  }, [selectedCell])
+
+  useEffect(() => {
+    const copyWithKeyboard = (event: KeyboardEvent) => {
+      if (!selectedCell || event.key.toLocaleLowerCase() !== 'c' || (!event.ctrlKey && !event.metaKey) || event.altKey) return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return
+      if (window.getSelection()?.toString()) return
+      event.preventDefault()
+      void copySelectedCell()
+    }
+    window.addEventListener('keydown', copyWithKeyboard)
+    return () => window.removeEventListener('keydown', copyWithKeyboard)
+  }, [selectedCell, copySelectedCell])
   const runCellSearch = async () => {
     if (!workbook || !sheetName || !cellSearch.trim()) { setMatches([]); setMatchIndex(-1); return }
     try {
@@ -183,13 +223,20 @@ function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value <= 0 ? matches.length - 1 : value - 1)}><ChevronLeft size={14} /></button>
       <span>{matches.length ? `${matchIndex + 1}/${matches.length}` : '0/0'}</span>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value >= matches.length - 1 ? 0 : value + 1)}><ChevronRight size={14} /></button>
-      {selectedCell && <button className="config-selected-cell" title="复制单元格内容" onClick={async () => { await navigator.clipboard.writeText(selectedCell.text); showAppNotice({ message: `${selectedCell.address} 已复制`, kind: 'success' }) }}><strong>{selectedCell.address}</strong><span>{selectedCell.text || '（空）'}</span><ClipboardCopy size={13} /></button>}
+      <div className="config-freeze-controls">
+        <label>固定行<input aria-label="固定表头行数" type="number" min={0} max={Math.min(activeSheet?.rowCount ?? 0, MAX_FROZEN_ROWS)} value={frozen.rows} onChange={(event) => updateFrozen('rows', event.currentTarget.valueAsNumber)} /></label>
+        <label>固定列<input aria-label="固定表头列数" type="number" min={0} max={Math.min(activeSheet?.columnCount ?? 0, MAX_FROZEN_COLUMNS)} value={frozen.columns} onChange={(event) => updateFrozen('columns', event.currentTarget.valueAsNumber)} /></label>
+      </div>
     </div>
+    <section className={`config-cell-inspector ${selectedCell ? 'has-selection' : ''}`}>
+      <header><strong>{selectedCell?.address ?? '单元格内容'}</strong><span>{selectedCell ? 'Ctrl+C 快速复制' : '选择下方单元格后在这里查看完整内容'}</span><button disabled={!selectedCell} title="复制单元格内容" onClick={() => void copySelectedCell()}><ClipboardCopy size={14} />复制</button></header>
+      <textarea aria-label="单元格内容" readOnly value={selectedCell?.text ?? ''} placeholder="尚未选择单元格" onFocus={(event) => event.currentTarget.select()} />
+    </section>
     <div className="config-sheet-tabs">
-      {workbook.sheets.map((sheet) => <button key={sheet.name} className={sheet.name === sheetName ? 'active' : ''} onClick={() => { setSheetName(sheet.name); setMatches([]); setMatchIndex(-1) }}>{sheet.name}<span>{sheet.rowCount} × {sheet.columnCount}</span></button>)}
+      {workbook.sheets.map((sheet) => <button key={sheet.name} className={sheet.name === sheetName ? 'active' : ''} onClick={() => { setSheetName(sheet.name); setMatches([]); setMatchIndex(-1); setSelectedCell(undefined) }}>{sheet.name}<span>{sheet.rowCount} × {sheet.columnCount}</span></button>)}
     </div>
     <div className="config-sheet-area">
-      {activeSheet ? <VirtualSheet branch={file.branch} relativePath={file.relativePath} sheet={activeSheet} refreshKey={refreshKey} target={matches[matchIndex]} onSelect={setSelectedCell} /> : <EmptyState title="没有可用的工作表" />}
+      {activeSheet ? <VirtualSheet branch={file.branch} relativePath={file.relativePath} sheet={activeSheet} refreshKey={refreshKey} target={matches[matchIndex]} selectedAddress={selectedCell?.address} frozenRows={frozen.rows} frozenColumns={frozen.columns} onSelect={setSelectedCell} /> : <EmptyState title="没有可用的工作表" />}
     </div>
   </section>
 }

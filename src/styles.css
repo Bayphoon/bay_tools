@@ -435,12 +435,21 @@ a { color: inherit; text-decoration: none; }
 .config-workbook-header span { display: block; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .config-workbook-header > div:last-child { display: flex; gap: 5px; }
 .config-workbook-toolbar { flex: 0 0 39px; display: flex; align-items: center; gap: 5px; padding: 4px 7px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 10px; }
-.config-cell-search { width: min(360px, 45%); height: 29px; display: flex; align-items: center; gap: 6px; padding-left: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
+.config-cell-search { width: min(430px, 48%); height: 29px; display: flex; align-items: center; gap: 6px; padding-left: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
 .config-cell-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
 .config-cell-search button { align-self: stretch; border: 0; border-left: 1px solid var(--border); padding: 0 9px; background: var(--surface-2); color: var(--text); cursor: pointer; }
-.config-selected-cell { min-width: 0; max-width: 380px; height: 28px; display: flex; align-items: center; gap: 7px; margin-left: auto; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); cursor: pointer; }
-.config-selected-cell strong { color: var(--accent); font-size: 10px; }
-.config-selected-cell span { overflow: hidden; color: var(--muted); font: 10px "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.config-freeze-controls { min-width: 0; display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.config-freeze-controls label { height: 28px; display: flex; align-items: center; gap: 5px; padding: 0 5px 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--muted); white-space: nowrap; }
+.config-freeze-controls input { width: 46px; height: 21px; border: 1px solid var(--border); border-radius: 3px; outline: none; background: var(--surface); color: var(--text); font: 11px "Cascadia Code", Consolas, monospace; text-align: center; }
+.config-freeze-controls input:focus { border-color: var(--accent); }
+.config-cell-inspector { flex: 0 0 auto; width: 100%; height: 84px; min-height: 58px; max-height: 280px; display: flex; flex-direction: column; overflow: hidden; resize: vertical; border-bottom: 1px solid var(--border); background: var(--surface); }
+.config-cell-inspector header { flex: 0 0 28px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; }
+.config-cell-inspector header strong { min-width: 28px; color: var(--accent); font: 600 11px "Cascadia Code", Consolas, monospace; }
+.config-cell-inspector header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-cell-inspector header button { height: 23px; display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 10px; cursor: pointer; }
+.config-cell-inspector header button:disabled { opacity: .4; cursor: default; }
+.config-cell-inspector textarea { flex: 1; min-height: 0; width: 100%; resize: none; border: 0; padding: 7px 9px; outline: none; background: var(--bg); color: var(--text); font: 12px/1.5 "Cascadia Code", Consolas, monospace; white-space: pre-wrap; }
+.config-cell-inspector:not(.has-selection) textarea { color: var(--muted); }
 .config-sheet-tabs { flex: 0 0 34px; display: flex; align-items: stretch; overflow-x: auto; border-bottom: 1px solid var(--border); background: var(--surface); }
 .config-sheet-tabs button { min-width: 92px; max-width: 220px; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 0; border-right: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
 .config-sheet-tabs button.active { background: var(--bg); color: var(--text); box-shadow: inset 0 2px var(--accent); }
@@ -452,9 +461,16 @@ a { color: inherit; text-decoration: none; }
 .config-grid-cell, .config-grid-column-header, .config-grid-row-header, .config-grid-corner { position: absolute; }
 .config-grid-cell { width: 148px; height: 28px; overflow: hidden; padding: 0 7px; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg); color: var(--text); font: 11px/28px "Cascadia Code", Consolas, monospace; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
 .config-grid-cell:hover { z-index: 2; background: var(--surface-hover); box-shadow: inset 0 0 0 1px var(--accent); }
-.config-grid-cell.search-match { z-index: 2; background: color-mix(in srgb, var(--warning) 15%, var(--bg)); box-shadow: inset 0 0 0 2px var(--warning); }
+.config-grid-cell.frozen-column { z-index: 3; background: color-mix(in srgb, var(--surface-2) 42%, var(--bg)); }
+.config-grid-cell.frozen-row { z-index: 4; background: color-mix(in srgb, var(--surface-2) 42%, var(--bg)); }
+.config-grid-cell.frozen-row.frozen-column { z-index: 6; }
+.config-grid-cell.search-match { z-index: 7; background: color-mix(in srgb, var(--warning) 15%, var(--bg)); box-shadow: inset 0 0 0 2px var(--warning); }
+.config-grid-cell.selected { z-index: 8; background: color-mix(in srgb, var(--accent) 12%, var(--bg)); box-shadow: inset 0 0 0 2px var(--accent); }
 .config-grid-column-header { z-index: 5; width: 148px; height: 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font: 10px/30px "Cascadia Code", Consolas, monospace; text-align: center; }
 .config-grid-row-header { z-index: 4; width: 54px; height: 28px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font: 10px/28px "Cascadia Code", Consolas, monospace; text-align: center; }
+.config-grid-column-header.frozen-column, .config-grid-row-header.frozen-row { z-index: 11; }
+.config-grid-cell.freeze-column-edge, .config-grid-column-header.freeze-column-edge { border-right: 2px solid color-mix(in srgb, var(--accent) 70%, var(--border)); }
+.config-grid-cell.freeze-row-edge, .config-grid-row-header.freeze-row-edge { border-bottom: 2px solid color-mix(in srgb, var(--accent) 70%, var(--border)); }
 .config-grid-corner { z-index: 7; width: 54px; height: 30px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .config-grid-loading { position: absolute; right: 13px; bottom: 12px; z-index: 10; padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--muted); font-size: 10px; box-shadow: 0 4px 14px color-mix(in srgb, #000 22%, transparent); }
 .config-grid-error { position: absolute; left: 50%; top: 12px; z-index: 20; max-width: 560px; padding: 6px 10px; border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--border)); border-radius: 5px; background: var(--surface); color: var(--danger); font-size: 11px; transform: translateX(-50%); }
@@ -462,6 +478,11 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 1150px) {
   .config-branch-shell { grid-template-columns: 280px minmax(0, 1fr); }
   .config-workbook-header .tool-button:first-child { font-size: 0; }
+  .config-cell-search { width: min(360px, 44%); }
+  .config-freeze-controls label { padding-left: 5px; font-size: 0; }
+  .config-freeze-controls label::before { font-size: 10px; }
+  .config-freeze-controls label:first-child::before { content: '行'; }
+  .config-freeze-controls label:last-child::before { content: '列'; }
 }
 
 .json-page .page-header, .markdown-page .page-header { flex: 0 0 auto; margin-bottom: 10px; }
