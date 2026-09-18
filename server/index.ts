@@ -7,7 +7,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, ConfigTableSearchMode, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
 import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
@@ -20,6 +20,7 @@ import { PersonalDataManager } from './personalData.js'
 import { TranslationStore } from './translationStore.js'
 import { registerTranslationRoutes } from './translationRoutes.js'
 import { CodeCardStore } from './codeCardStore.js'
+import { ConfigTableStore } from './configTableStore.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
@@ -27,7 +28,8 @@ const languageStore = new LanguageStore(projectRoot)
 const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
-const apiVersion = 18
+const configTableStore = new ConfigTableStore(projectRoot)
+const apiVersion = 19
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -137,6 +139,58 @@ app.put<{ Params: { id: string }; Body: { key: string; favorite: boolean; revisi
 
 app.get('/api/server-status', async () => serverStatusStore.getState())
 app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) => serverStatusStore.sync(request.body?.url ?? ''))
+
+app.get('/api/config-tables', async () => configTableStore.getState())
+app.put<{ Body: { path: string } }>('/api/config-tables/root', async (request) => configTableStore.setRootPath(request.body?.path ?? ''))
+app.post('/api/config-tables/refresh-local', async () => configTableStore.refreshLocalBranches())
+app.post('/api/config-tables/sync-remote', async () => configTableStore.syncRemoteBranches())
+app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/scan', async (request) => configTableStore.scanBranch(request.params.branch))
+app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/update', async (request) => configTableStore.updateBranch(request.params.branch))
+app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/download', async (request) => configTableStore.downloadBranch(request.params.branch))
+app.get<{ Querystring: { branch: string; includeDev?: string; search?: string; mode?: ConfigTableSearchMode; page?: string } }>('/api/config-tables/files', async (request) => {
+  return configTableStore.searchFiles(
+    request.query.branch,
+    request.query.includeDev === '1',
+    request.query.search ?? '',
+    request.query.mode ?? 'tokens',
+    Number(request.query.page ?? 1),
+  )
+})
+app.get<{ Querystring: { branch: string; path: string } }>('/api/config-tables/workbook', async (request) => {
+  return configTableStore.getWorkbook(request.query.branch, request.query.path)
+})
+app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/workbook/refresh', async (request) => {
+  return configTableStore.refreshWorkbook(request.body.branch, request.body.path)
+})
+app.get<{ Querystring: { branch: string; path: string; sheet: string; startRow?: string; rowCount?: string; startColumn?: string; columnCount?: string } }>('/api/config-tables/range', async (request) => {
+  return configTableStore.getRange(
+    request.query.branch,
+    request.query.path,
+    request.query.sheet,
+    Number(request.query.startRow ?? 1),
+    Number(request.query.rowCount ?? 100),
+    Number(request.query.startColumn ?? 1),
+    Number(request.query.columnCount ?? 20),
+  )
+})
+app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string } }>('/api/config-tables/cell-search', async (request) => {
+  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '')
+})
+app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/reveal', async (request, reply) => {
+  await revealInExplorer(await configTableStore.getFileLocation(request.body.branch, request.body.path), true)
+  return reply.status(204).send()
+})
+app.post<{ Body: { branch: string } }>('/api/config-tables/branch/reveal', async (request, reply) => {
+  await revealInExplorer(await configTableStore.getBranchLocation(request.body.branch), false)
+  return reply.status(204).send()
+})
+app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/open', async (request, reply) => {
+  await openBrowser(await configTableStore.getFileLocation(request.body.branch, request.body.path), { wait: false })
+  return reply.status(204).send()
+})
+app.get<{ Querystring: { branch: string; path: string } }>('/api/config-tables/file/location', async (request) => ({
+  path: await configTableStore.getFileLocation(request.query.branch, request.query.path),
+}))
 
 app.get('/api/code-cards', async () => codeCardStore.getLibrary())
 app.get<{ Querystring: { search?: string; page?: string; mode?: CodeCardSearchMode } }>('/api/code-cards/search', async (request) => {
@@ -414,7 +468,7 @@ export async function buildApp(options?: { serveFrontend?: boolean }) {
   await personalDataManager.autoRestoreIfEmpty()
   // 主存储初始化会清理整个 Doc 下遗留的原子写入临时文件，必须先于其他存储执行。
   await store.init()
-  await Promise.all([languageStore.init(), serverStatusStore.init(), codeCardStore.init()])
+  await Promise.all([languageStore.init(), serverStatusStore.init(), codeCardStore.init(), configTableStore.init()])
   if (options?.serveFrontend) await registerFrontend()
   return app
 }
