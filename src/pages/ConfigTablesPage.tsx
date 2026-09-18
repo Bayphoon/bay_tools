@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, ClipboardCopy, Download, ExternalLink, FileSpreadsheet, FolderOpen, RefreshCw, Search, Table2 } from 'lucide-react'
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { ConfigTableCellMatch, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
 import { EmptyState, PageHeader, Spinner, ToolButton } from '../components/ui'
@@ -12,6 +12,17 @@ const ROW_HEIGHT = 28
 const COLUMN_WIDTH = 148
 const ROW_HEADER_WIDTH = 54
 const COLUMN_HEADER_HEIGHT = 30
+const CONFIG_TABLE_FONT_SIZE_KEY = 'baytools.config-table.font-size'
+const MIN_CONFIG_TABLE_FONT_SIZE = 10
+const MAX_CONFIG_TABLE_FONT_SIZE = 20
+const DEFAULT_CONFIG_TABLE_FONT_SIZE = 12
+
+function initialConfigTableFontSize(): number {
+  const stored = Number(window.localStorage.getItem(CONFIG_TABLE_FONT_SIZE_KEY))
+  return Number.isInteger(stored) && stored >= MIN_CONFIG_TABLE_FONT_SIZE && stored <= MAX_CONFIG_TABLE_FONT_SIZE
+    ? stored
+    : DEFAULT_CONFIG_TABLE_FONT_SIZE
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '操作失败'
@@ -132,6 +143,11 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const [matchIndex, setMatchIndex] = useState(-1)
   const [selectedCell, setSelectedCell] = useState<{ address: string; text: string }>()
   const [frozenBySheet, setFrozenBySheet] = useState<Record<string, { rows: number; columns: number }>>({})
+  const [fontSize, setFontSize] = useState(initialConfigTableFontSize)
+
+  useEffect(() => {
+    window.localStorage.setItem(CONFIG_TABLE_FONT_SIZE_KEY, String(fontSize))
+  }, [fontSize])
 
   const load = async (force = false) => {
     setLoading(true)
@@ -208,7 +224,7 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   if (loading && !workbook) return <div className="config-viewer-loading"><Spinner label="正在读取配置表" /></div>
   if (error || !workbook) return <div className="config-viewer-loading"><EmptyState title="配置表读取失败"><span>{error ?? '文件不可用'}</span><ToolButton onClick={() => void load()}>重试</ToolButton></EmptyState></div>
 
-  return <section className="config-workbook-viewer">
+  return <section className="config-workbook-viewer" style={{ '--config-table-font-size': `${fontSize}px` } as CSSProperties}>
     <header className="config-workbook-header">
       <div><h2>{workbook.name}</h2><span>{workbook.branch} · {workbook.relativePath} · {formatSize(workbook.size)} · {new Date(workbook.updatedAt).toLocaleString()}</span></div>
       <div>
@@ -223,6 +239,12 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value <= 0 ? matches.length - 1 : value - 1)}><ChevronLeft size={14} /></button>
       <span>{matches.length ? `${matchIndex + 1}/${matches.length}` : '0/0'}</span>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value >= matches.length - 1 ? 0 : value + 1)}><ChevronRight size={14} /></button>
+      <div className="config-font-size-controls">
+        <span>字号</span>
+        <button aria-label="减小表格字号" disabled={fontSize <= MIN_CONFIG_TABLE_FONT_SIZE} onClick={() => setFontSize((value) => Math.max(MIN_CONFIG_TABLE_FONT_SIZE, value - 1))}>A−</button>
+        <output aria-label="当前表格字号">{fontSize}px</output>
+        <button aria-label="增大表格字号" disabled={fontSize >= MAX_CONFIG_TABLE_FONT_SIZE} onClick={() => setFontSize((value) => Math.min(MAX_CONFIG_TABLE_FONT_SIZE, value + 1))}>A＋</button>
+      </div>
       <div className="config-freeze-controls">
         <label>固定行<input aria-label="固定表头行数" type="number" min={0} max={Math.min(activeSheet?.rowCount ?? 0, MAX_FROZEN_ROWS)} value={frozen.rows} onChange={(event) => updateFrozen('rows', event.currentTarget.valueAsNumber)} /></label>
         <label>固定列<input aria-label="固定表头列数" type="number" min={0} max={Math.min(activeSheet?.columnCount ?? 0, MAX_FROZEN_COLUMNS)} value={frozen.columns} onChange={(event) => updateFrozen('columns', event.currentTarget.valueAsNumber)} /></label>

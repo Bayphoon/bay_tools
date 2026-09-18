@@ -14,6 +14,7 @@ const file: ConfigTableFile = {
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => undefined) } })
   vi.spyOn(localBridge, 'getConfigTableWorkbook').mockResolvedValue({
@@ -62,5 +63,16 @@ describe('ConfigTablesPage workbook viewer', () => {
     await waitFor(() => expect(rangeSpy).toHaveBeenCalled())
     expect((screen.getByLabelText('固定表头行数') as HTMLInputElement).value).toBe('3')
     expect((screen.getByLabelText('固定表头列数') as HTMLInputElement).value).toBe('2')
+  })
+
+  it('adjusts the table font size and keeps the preference locally', async () => {
+    const { container } = render(<WorkbookViewer file={file} />)
+    await screen.findByRole('button', { name: '完整的单元格内容' })
+    const viewer = container.querySelector('.config-workbook-viewer') as HTMLElement
+    expect(viewer.style.getPropertyValue('--config-table-font-size')).toBe('12px')
+
+    fireEvent.click(screen.getByRole('button', { name: '增大表格字号' }))
+    expect(viewer.style.getPropertyValue('--config-table-font-size')).toBe('13px')
+    await waitFor(() => expect(window.localStorage.getItem('baytools.config-table.font-size')).toBe('13'))
   })
 })

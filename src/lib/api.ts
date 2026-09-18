@@ -222,6 +222,7 @@ export const localBridge: LocalBridge = {
   setConfigTableRoot: (path) => request<ConfigTableState>('/api/config-tables/root', { method: 'PUT', body: JSON.stringify({ path }) }),
   refreshConfigTableLocal: () => request<ConfigTableState>('/api/config-tables/refresh-local', { method: 'POST', body: '{}' }),
   syncConfigTableRemote: () => request<ConfigTableState>('/api/config-tables/sync-remote', { method: 'POST', body: '{}' }),
+  setConfigTableBranchPinned: (branch, pinned) => request<ConfigTableState>(`/api/config-tables/branches/${encodeURIComponent(branch)}/pin`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),
   scanConfigTableBranch: (branch) => request<ConfigTableState>(`/api/config-tables/branches/${encodeURIComponent(branch)}/scan`, { method: 'POST', body: '{}' }),
   updateConfigTableBranch: (branch) => request<ConfigTableState>(`/api/config-tables/branches/${encodeURIComponent(branch)}/update`, { method: 'POST', body: '{}' }),
   downloadConfigTableBranch: (branch) => request<ConfigTableState>(`/api/config-tables/branches/${encodeURIComponent(branch)}/download`, { method: 'POST', body: '{}' }),

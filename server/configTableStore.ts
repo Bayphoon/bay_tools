@@ -39,6 +39,7 @@ interface PersistedConfigTableState {
   localRefreshedAt?: string
   remoteSyncedAt?: string
   remoteBranches: string[]
+  pinnedBranches?: string[]
 }
 
 interface ConfigTableBranchIndex {
@@ -167,6 +168,7 @@ export class ConfigTableStore {
         revision: 1,
         rootPath,
         remoteBranches: [],
+        pinnedBranches: [],
       } satisfies PersistedConfigTableState)
     }
     if (!(await exists(this.indexPath))) {
@@ -224,13 +226,18 @@ export class ConfigTableStore {
     }
     const index = await this.index()
     const all = new Set([...localBranches, ...state.remoteBranches])
-    const branches: ConfigTableBranch[] = [...all].sort((left, right) => left.localeCompare(right, 'zh-CN', { numeric: true })).map((name) => ({
+    const pinned = new Set(state.pinnedBranches ?? [])
+    const branches: ConfigTableBranch[] = [...all].sort((left, right) => {
+      const pinnedDifference = Number(pinned.has(right)) - Number(pinned.has(left))
+      return pinnedDifference || left.localeCompare(right, 'zh-CN', { numeric: true })
+    }).map((name) => ({
       name,
       local: localBranches.includes(name),
       remote: state.remoteBranches.includes(name),
+      pinned: pinned.has(name),
       ...(index.branches[name] ? { fileCount: index.branches[name].files.length, lastScannedAt: index.branches[name].scannedAt } : {}),
     }))
-    const { remoteBranches: _remoteBranches, ...publicFields } = state
+    const { remoteBranches: _remoteBranches, pinnedBranches: _pinnedBranches, ...publicFields } = state
     return { ...publicFields, branches }
   }
 
@@ -251,6 +258,7 @@ export class ConfigTableStore {
       rootPath: await realpath(rootPath),
       localRefreshedAt: now(),
       remoteBranches: [],
+      pinnedBranches: [],
     }
     await Promise.all([
       writeJson(this.statePath, updated),
@@ -264,6 +272,26 @@ export class ConfigTableStore {
     await this.localBranchNames()
     const state = await this.state()
     const updated = { ...state, revision: state.revision + 1, updatedAt: now(), localRefreshedAt: now() }
+    await writeJson(this.statePath, updated)
+    return this.publicState(updated)
+  }
+
+  async setBranchPinned(branch: string, pinned: boolean): Promise<ConfigTableState> {
+    const name = normalizeBranchName(branch)
+    const state = await this.state()
+    const current = await this.publicState(state)
+    if (!current.branches.some((item) => item.name === name)) {
+      throw new AppError(404, 'CONFIG_BRANCH_NOT_FOUND', `不存在配置表分支 ${name}`)
+    }
+    const pinnedBranches = pinned
+      ? [...new Set([...(state.pinnedBranches ?? []), name])]
+      : (state.pinnedBranches ?? []).filter((item) => item !== name)
+    const updated: PersistedConfigTableState = {
+      ...state,
+      pinnedBranches,
+      revision: state.revision + 1,
+      updatedAt: now(),
+    }
     await writeJson(this.statePath, updated)
     return this.publicState(updated)
   }

@@ -96,6 +96,28 @@ describe('ConfigTableStore', () => {
     await expect(store.getFileLocation('../other', 'file.xlsx')).rejects.toMatchObject({ code: 'INVALID_CONFIG_BRANCH' })
   })
 
+  it('persists pinned branches and orders them before unpinned branches', async () => {
+    const { projectRoot, configRoot } = await fixture()
+    await mkdir(join(configRoot, 'alpha'), { recursive: true })
+    await mkdir(join(configRoot, 'zeta'), { recursive: true })
+    const store = new ConfigTableStore(projectRoot, { rootPath: configRoot })
+    await store.init()
+
+    let state = await store.setBranchPinned('zeta', true)
+    expect(state.branches[0]).toMatchObject({ name: 'zeta', pinned: true })
+    expect(state.branches.slice(1).map((branch) => branch.name)).toEqual(['alpha', 'feature_a'])
+
+    const reopened = new ConfigTableStore(projectRoot, { rootPath: configRoot })
+    await reopened.init()
+    state = await reopened.getState()
+    expect(state.branches[0]).toMatchObject({ name: 'zeta', pinned: true })
+
+    state = await reopened.setBranchPinned('zeta', false)
+    expect(state.branches.map((branch) => branch.name)).toEqual(['alpha', 'feature_a', 'zeta'])
+    expect(state.branches.find((branch) => branch.name === 'zeta')?.pinned).toBe(false)
+    await expect(reopened.setBranchPinned('missing', true)).rejects.toMatchObject({ code: 'CONFIG_BRANCH_NOT_FOUND' })
+  })
+
   it('syncs remote names through svn argument arrays and updates one local branch', async () => {
     const { projectRoot, configRoot, branchRoot } = await fixture()
     await writeWorkbook(join(branchRoot, 'server.xlsx'))
