@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "revision": 30,
+  "id": "71466880-eed0-42fb-9346-3c6348db42b9",
+  "title": "未命名代码段",
+  "createdAt": "2026-09-17T03:13:59.504Z",
+  "updatedAt": "2026-09-21T11:17:42.963Z",
+  "cards": [
+    {
+      "id": "c94fe790-6af6-490a-9b9a-2f9ae2812867",
+      "title": "NPC 城主",
+      "code": "local avatar_big = self.city_meta.avatar_big\r\nlocal appearance = LocalController:instance():tryGetLine(LuaEntry.Player:GetABTestTableName(TableName.HeroAppearance), toInt(avatar_big))\r\nif appearance ~= nil then\r\n    local lord_icon_path = LoadPath.HeroIconsSmallPath .. appearance.queue_icon_path\r\n    -- name = 城主名字\r\n    if appearance.name ~= nil and appearance.name ~= \"\" then\r\n        -- city_npc_lords_name_first--铁獠帝国 {0}\r\n        self.owner_name:SetLocalText(\"city_npc_lords_name_first\", Localization:GetString(appearance.name))\r\n    else\r\n        self.owner_name:SetText(\"\")\r\n    end\r\n    -- queue_icon_path = 城主头像图标\r\n    self.player_show:ShowDummyIcon(lord_icon_path, \"Assets/Main/Sprites/UI/UILord/HeadFrame_dummy_citylord.png\")\r\n    self.appearance_gender = appearance.gender\r\nend",
+      "collapsed": false,
+      "height": 363,
+      "splitRatio": 55,
+      "image": {
+        "fileName": "c94fe790-6af6-490a-9b9a-2f9ae2812867-7c2c4a60-956e-44f7-92a3-a93b0b9b474b.webp",
+        "mimeType": "image/webp",
+        "size": 5596,
+        "width": 447,
+        "height": 103,
+        "updatedAt": "2026-09-20T08:11:07.871Z"
+      },
+      "createdAt": "2026-09-20T08:10:47.675Z",
+      "updatedAt": "2026-09-21T11:17:42.963Z"
+    },
+    {
+      "id": "26065e98-d036-411c-8552-da2cd926bda1",
+      "title": "开关",
+      "code": "-- function_on\r\nLuaEntry.DataConfig:CheckSwitch(\"shop_general_switch\")--返回bool\r\n\r\n-- client swtich\r\nCS.ClientSwitch.IsOn(CS.ClientSwitch.ENABLE_BINARY_MANIFEST)\r\n",
+      "collapsed": false,
+      "height": 240,
+      "splitRatio": 55,
+      "createdAt": "2026-09-21T06:13:24.525Z",
+      "updatedAt": "2026-09-21T11:17:42.963Z"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-14T06:30:31.863Z",
-  "revision": 51,
+  "updatedAt": "2026-09-21T11:18:33.302Z",
+  "revision": 58,
   "items": [
     {
       "schemaVersion": 1,
@@ -55,6 +55,60 @@
       "updatedAt": "2026-09-04T09:50:06.823Z",
       "sourceLastModified": "2026-09-04T09:45:44.188Z",
       "contentRevision": 4,
+      "metadataRevision": 1
+    },
+    {
+      "schemaVersion": 1,
+      "id": "86a1be06-d8e0-4cac-b0fc-a76cf5889d04",
+      "importedName": "国王嘉奖协议.md",
+      "name": "国王嘉奖协议.md",
+      "description": "",
+      "favorite": false,
+      "mimeType": "text/markdown",
+      "extension": ".md",
+      "previewKind": "markdown",
+      "size": 3117,
+      "sha256": "a6c91a83e3c722dbbff0113aeb63c35dd23982edc1597ec84b54b33bb08acdd4",
+      "createdAt": "2026-09-21T11:18:21.053Z",
+      "updatedAt": "2026-09-21T11:18:21.053Z",
+      "sourceLastModified": "2026-09-07T09:41:48.088Z",
+      "contentRevision": 1,
+      "metadataRevision": 1
+    },
+    {
+      "schemaVersion": 1,
+      "id": "9ba241d3-9bb8-41ed-a60d-3c81fd7b225f",
+      "importedName": "剪贴文本-20260921-191826.txt",
+      "name": "剪贴文本-20260921-191826.txt",
+      "description": "",
+      "favorite": false,
+      "mimeType": "text/plain;charset=utf-8",
+      "extension": ".txt",
+      "previewKind": "text",
+      "size": 309,
+      "sha256": "856e6aeb4520f53860b3d5ff5c74852f87a5038e9c7cf2ec87693110f6caa733",
+      "createdAt": "2026-09-21T11:18:28.133Z",
+      "updatedAt": "2026-09-21T11:18:28.133Z",
+      "sourceLastModified": "2026-09-21T11:18:28.124Z",
+      "contentRevision": 1,
+      "metadataRevision": 1
+    },
+    {
+      "schemaVersion": 1,
+      "id": "b556722e-f48d-4615-8021-ff857769c64f",
+      "importedName": "剪贴图片-20260921-191832.png",
+      "name": "剪贴图片-20260921-191832.png",
+      "description": "",
+      "favorite": false,
+      "mimeType": "image/png",
+      "extension": ".png",
+      "previewKind": "image",
+      "size": 289508,
+      "sha256": "c363114b130fc274e48b7a241794b749203299bdd0f2545c769ebf0f90e9f290",
+      "createdAt": "2026-09-21T11:18:33.299Z",
+      "updatedAt": "2026-09-21T11:18:33.299Z",
+      "sourceLastModified": "2026-09-21T11:18:33.294Z",
+      "contentRevision": 1,
       "metadataRevision": 1
     }
   ]

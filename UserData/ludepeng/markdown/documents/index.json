@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-16T03:58:01.589Z",
-  "revision": 343,
+  "updatedAt": "2026-09-21T11:02:50.417Z",
+  "revision": 377,
   "folders": [
     {
-      "id": "6ea07ba0-6d68-4ac2-ae2c-4b25eba45082",
-      "name": "常用代码",
-      "createdAt": "2026-09-09T04:04:48.523Z",
-      "updatedAt": "2026-09-09T04:04:48.523Z"
+      "id": "dda7f6da-0071-4684-aa1b-dbc26693b7eb",
+      "name": "功能开发",
+      "createdAt": "2026-09-10T06:55:27.355Z",
+      "updatedAt": "2026-09-18T09:38:21.165Z"
     },
     {
-      "id": "dda7f6da-0071-4684-aa1b-dbc26693b7eb",
-      "name": "功能文档",
-      "createdAt": "2026-09-10T06:55:27.355Z",
-      "updatedAt": "2026-09-10T06:55:27.355Z"
+      "id": "1d009c4b-3b93-40c7-b22e-47eb04b63551",
+      "name": "分组",
+      "createdAt": "2026-09-16T08:52:54.975Z",
+      "updatedAt": "2026-09-16T08:52:54.975Z"
     }
   ],
   "documents": [
@@ -22,56 +22,81 @@
       "title": "Codex AGENTS.md",
       "createdAt": "2026-09-03T03:13:38.246Z",
       "updatedAt": "2026-09-03T09:25:34.350Z",
-      "revision": 14
+      "revision": 14,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "0b102914-8334-46c2-8006-82ffa61fc46a",
       "title": "UIBaseView模板",
       "createdAt": "2026-09-03T07:12:57.186Z",
       "updatedAt": "2026-09-07T12:06:16.974Z",
-      "revision": 53
+      "revision": 53,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "4373745b-9379-4ba5-a4bb-e1dcf04e923b",
       "title": "UIBaseContainer模板",
       "createdAt": "2026-09-03T07:23:05.603Z",
       "updatedAt": "2026-09-07T12:06:44.559Z",
-      "revision": 25
+      "revision": 25,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "3cf97fcd-c249-45b0-bc7d-937e54af27a2",
       "title": "Codex 知识库约束",
       "createdAt": "2026-09-04T06:28:31.340Z",
       "updatedAt": "2026-09-07T12:05:49.185Z",
-      "revision": 7
+      "revision": 7,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "09a09b14-4ede-40c1-8a30-269200fd70c1",
       "title": "Manifest 开关测试方案",
       "createdAt": "2026-09-04T09:21:48.947Z",
       "updatedAt": "2026-09-04T09:41:15.026Z",
-      "revision": 4
+      "revision": 4,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "ee6356b4-cf85-4ef7-887e-e7392b76b92d",
       "title": "Codex AGENTS.md 备份",
       "createdAt": "2026-09-04T09:25:34.964Z",
       "updatedAt": "2026-09-05T03:02:07.721Z",
-      "revision": 3
+      "revision": 3,
+      "extension": ".md",
+      "previewKind": "markdown"
     },
     {
       "id": "e59f1121-722c-4f92-b942-97af51a3ccf6",
-      "title": "未命名 Markdown",
-      "folderId": "6ea07ba0-6d68-4ac2-ae2c-4b25eba45082",
+      "title": "常用代码",
+      "extension": ".md",
+      "previewKind": "markdown",
       "createdAt": "2026-09-09T04:04:52.289Z",
-      "updatedAt": "2026-09-14T06:04:54.286Z",
-      "revision": 111
+      "updatedAt": "2026-09-16T07:06:44.076Z",
+      "revision": 114
     },
     {
       "id": "01801d4e-5486-426b-8e9c-9334dbaceece",
       "title": "Today",
+      "extension": ".md",
+      "previewKind": "markdown",
       "createdAt": "2026-09-14T06:04:39.892Z",
-      "updatedAt": "2026-09-15T03:58:13.762Z",
+      "updatedAt": "2026-09-21T11:02:50.414Z",
+      "revision": 19
+    },
+    {
+      "id": "3d67d044-30b2-41a7-9ebd-9823be10af18",
+      "title": "首占奖励优化",
+      "extension": ".md",
+      "previewKind": "markdown",
+      "folderId": "dda7f6da-0071-4684-aa1b-dbc26693b7eb",
+      "createdAt": "2026-09-18T09:38:40.711Z",
+      "updatedAt": "2026-09-18T09:39:26.994Z",
       "revision": 5
     }
   ]

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-09-16T03:53:49.643Z",
-  "revision": 650,
+  "updatedAt": "2026-09-21T11:19:43.238Z",
+  "revision": 1056,
   "theme": {
     "mode": "light",
     "lightAccent": "#2563EC",
@@ -13,14 +13,45 @@
   },
   "sidebar": {
     "collapsedGroups": [
-      "language",
-      "markdown-source:1bca1671-ea5e-4bba-9223-49429744417c",
       "markdown-source:9e89f6fe-130d-485b-9eb5-f1490d3b8335",
-      "markdown-source:063249bf-33b4-4f23-a7d0-5cdfe259a117",
+      "markdown-source:a1e8eae8-546d-4085-9ff4-1ba1b9a74bd1",
+      "json-folder:f8fcb832-6858-4379-9927-26f97e82b306",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:后端协议/国王&法令/国王嘉奖",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:框架和组件/UIComponents",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:框架和组件",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:DevDoc/SeasonMid/FeatureBrief",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:DevDoc/SeasonMid",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:DevDoc/AllianceExpedition",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:DevDoc",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:DevGuide",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:Framework/UIComponents",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:Util",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:GitHistory",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:Framework",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:3. 无四步回退-重复下载",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:4. 四步回退-持久化-Bin被清理-15325到15464",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:5. 四步回退-Manifest持久化清理修复-15325到15499",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:6. 工作报告",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:7.上线测试和开关",
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:8.AI Review",
+      "markdown-directory:1bca1671-ea5e-4bba-9223-49429744417c:Domain/Season",
+      "markdown-source:1bca1671-ea5e-4bba-9223-49429744417c",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:开发规则",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:后端协议",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:功能文档/国王&法令",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:功能文档/城市首占奖励和占领数据显示优化",
+      "markdown-directory:68330a16-6c68-473b-ab29-2a8f7ebc6762:功能文档",
+      "markdown-source:68330a16-6c68-473b-ab29-2a8f7ebc6762",
+      "markdown-source:aff9417f-7de3-4230-839e-046209c4d14d",
+      "managed-folder:1d009c4b-3b93-40c7-b22e-47eb04b63551",
       "json",
-      "markdown-source:40792c59-44ed-4c5a-8df6-d33ca436198e"
+      "markdown-directory:40792c59-44ed-4c5a-8df6-d33ca436198e:1. 新旧交替热更",
+      "markdown-source:40792c59-44ed-4c5a-8df6-d33ca436198e",
+      "config-tables",
+      "code-cards",
+      "markdown"
     ],
-    "width": 435
+    "width": 438
   },
   "workSchedule": {
     "workDays": [
