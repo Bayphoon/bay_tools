@@ -413,6 +413,56 @@ export interface CodeCardSearchPage {
 
 export const CODE_CARD_IMAGE_MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
+export const BOOKMARK_BUILTIN_ICONS = ['link', 'globe', 'code', 'book', 'github', 'server', 'database', 'cloud', 'game', 'tool', 'file', 'message', 'star'] as const
+export type BookmarkBuiltinIcon = typeof BOOKMARK_BUILTIN_ICONS[number]
+export type BookmarkLayout = 'list' | 'grid' | 'large'
+
+export type BookmarkIcon = {
+  kind: 'builtin'
+  name: BookmarkBuiltinIcon
+} | {
+  kind: 'local'
+  fileName: string
+  mimeType: string
+  size: number
+  updatedAt: string
+}
+
+export interface BookmarkItem {
+  id: string
+  title: string
+  url: string
+  favorite: boolean
+  icon: BookmarkIcon
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BookmarkLibrary {
+  schemaVersion: 1
+  revision: number
+  updatedAt: string
+  layout: BookmarkLayout
+  items: BookmarkItem[]
+}
+
+export interface BookmarkCreateInput {
+  title: string
+  url: string
+  builtinIcon: BookmarkBuiltinIcon
+  revision: number
+}
+
+export interface BookmarkUpdateInput {
+  title: string
+  url: string
+  favorite: boolean
+  builtinIcon?: BookmarkBuiltinIcon
+  revision: number
+}
+
+export const BOOKMARK_ICON_MAX_UPLOAD_SIZE = 2 * 1024 * 1024
+
 export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench' | 'code-card'
 
 export interface TrashItem {
@@ -592,6 +642,12 @@ export interface LocalBridge {
   deleteCodeCardFolder(id: string): Promise<void>
   uploadCodeCardImage(workspaceId: string, cardId: string, image: Blob, width: number, height: number, revision: number): Promise<CodeCardWorkspace>
   deleteCodeCardImage(workspaceId: string, cardId: string, revision: number): Promise<CodeCardWorkspace>
+  getBookmarks(): Promise<BookmarkLibrary>
+  createBookmark(input: BookmarkCreateInput): Promise<BookmarkLibrary>
+  updateBookmark(id: string, input: BookmarkUpdateInput): Promise<BookmarkLibrary>
+  deleteBookmark(id: string, revision: number): Promise<BookmarkLibrary>
+  updateBookmarkLayout(layout: BookmarkLayout, revision: number): Promise<BookmarkLibrary>
+  uploadBookmarkIcon(id: string, file: File, revision: number): Promise<BookmarkLibrary>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>

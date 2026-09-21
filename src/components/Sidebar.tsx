@@ -1,5 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, FileSpreadsheet, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Table2, Trash2 } from 'lucide-react'
+import { Bookmark, Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, FileSpreadsheet, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Table2, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { CodeCardFolder, CodeCardWorkspaceSummary, FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
@@ -418,6 +418,7 @@ export function Sidebar() {
     <div className="brand"><img className="brand-icon" src="/baytools-icon.png" alt="" /><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
     <nav className="nav-main">
       <NavLink to="/" end className="nav-row"><span className="nav-root-icon"><Home size={16} /></span><span>主页</span></NavLink>
+      <NavLink to="/bookmarks" className="nav-row"><span className="nav-root-icon"><Bookmark size={16} /></span><span>书签</span></NavLink>
       <div className="nav-group">
         <div className="nav-parent">
           <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><span className="nav-root-icon"><Braces size={16} /></span><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>

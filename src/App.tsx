@@ -16,6 +16,7 @@ const FileWorkbenchPage = lazy(() => import('./pages/FileWorkbenchPage').then((m
 const CodeCardsPage = lazy(() => import('./pages/CodeCardsPage').then((module) => ({ default: module.CodeCardsPage })))
 const PersonalDataPage = lazy(() => import('./pages/PersonalDataPage').then((module) => ({ default: module.PersonalDataPage })))
 const ConfigTablesPage = lazy(() => import('./pages/ConfigTablesPage').then((module) => ({ default: module.ConfigTablesPage })))
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage').then((module) => ({ default: module.BookmarksPage })))
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
       <Route path="markdown/document/:documentId" element={<MarkdownPage />} />
       <Route path="markdown/:sourceId" element={<MarkdownPage />} />
       <Route path="files" element={<FileWorkbenchPage />} />
+      <Route path="bookmarks" element={<BookmarksPage />} />
       <Route path="code-cards/:id" element={<CodeCardsPage />} />
       <Route path="data-sync" element={<PersonalDataPage />} />
       <Route path="settings" element={<SettingsPage />} />
