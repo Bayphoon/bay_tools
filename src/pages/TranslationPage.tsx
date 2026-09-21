@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { TRANSLATION_HISTORY_LIMIT, TRANSLATION_LANGUAGES, TRANSLATION_MAX_INPUT, TRANSLATION_MODELS, type TranslationConfig, type TranslationEntry, type TranslationInput, type TranslationModel } from '../../shared/translation'
 import { CopyButton, EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { useTranslation } from '../hooks/useTranslation'
 import { translationApi } from '../lib/api'
 import { confirmAction } from '../lib/confirmation'
@@ -71,7 +72,7 @@ export function TranslationPage() {
     <p className="translation-privacy">翻译时原文会发送给 DeepSeek；历史记录保存在本机，支持切换分支后继续查看，不参与数据同步。</p>
     <section className="settings-section translation-history">
       <div className="section-heading"><div><h2><History size={17} />本机历史 <span>{history.length}</span></h2><p>最近 {TRANSLATION_HISTORY_LIMIT} 条，最多约 8 MiB；点击记录载入原文与译文。</p></div><div className="toolbar"><ToolButton aria-label="刷新历史" disabled={historyLoading || historyBusy} onClick={() => void refreshHistory()}><RefreshCw size={14} /></ToolButton><ToolButton className="danger" disabled={historyBusy || (!history.length && !historyError)} onClick={() => void remove()}><Trash2 size={14} />清空历史</ToolButton></div></div>
-      <label className="search-field"><Search size={14} /><input aria-label="搜索翻译历史" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索原文或译文" /></label>
+      <label className="search-field"><Search size={14} /><input aria-label="搜索翻译历史" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => clearSearchOnEscape(event, search, () => setSearch(''))} placeholder="搜索原文或译文" /><SearchClearButton value={search} onClear={() => setSearch('')} label="清空翻译历史搜索" /></label>
       <InlineError>{historyError}</InlineError>
       {historyLoading ? <p role="status">正在加载历史…</p> : !visible.length ? <EmptyState title={search ? '没有匹配的历史记录' : '暂无翻译历史'}>完成翻译后，原文与译文会出现在这里。</EmptyState> : <div className="translation-history-list">{visible.map((entry) => <article className="translation-history-item" key={entry.id}><button className="translation-history-open" disabled={translation.busy} onClick={() => loadEntry(entry)}><span className="translation-history-meta">{entry.sourceLanguage} → {entry.targetLanguage} · {entry.model === 'deepseek-v4-pro' ? 'Pro' : 'Flash'} · {new Date(entry.createdAt).toLocaleString()}</span><strong>{entry.text}</strong><span className="translation-history-preview">{entry.translation}</span></button><div className="toolbar"><CopyButton value={entry.translation} /><ToolButton className="danger" aria-label="删除这条翻译历史" disabled={historyBusy} onClick={() => void remove(entry.id)}><Trash2 size={14} /></ToolButton></div></article>)}</div>}
     </section>

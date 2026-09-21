@@ -29,7 +29,7 @@ const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
-const apiVersion = 22
+const apiVersion = 23
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -178,7 +178,7 @@ app.get<{ Querystring: { branch: string; path: string; sheet: string; startRow?:
   )
 })
 app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string; mode?: ConfigTableCellSearchMode } }>('/api/config-tables/cell-search', async (request) => {
-  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '', request.query.mode ?? 'contains')
+  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '', request.query.mode ?? 'tokens')
 })
 app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/reveal', async (request, reply) => {
   await revealInExplorer(await configTableStore.getFileLocation(request.body.branch, request.body.path), true)

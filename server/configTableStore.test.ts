@@ -96,8 +96,10 @@ describe('ConfigTableStore', () => {
       ['3', 'hero', '6'],
       ['hidden-value', '', ''],
     ])
-    const matches = await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden', 'contains')
+    const matches = await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden', 'tokens')
     expect(matches).toEqual([{ row: 3, column: 1, address: 'A3', text: 'hidden-value' }])
+    expect(await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'value hidden', 'tokens')).toEqual(matches)
+    expect(await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden missing', 'tokens')).toEqual([])
     expect(await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden', 'exact')).toEqual([])
     expect(await store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden-value', 'exact')).toEqual(matches)
     await expect(store.searchCells('feature_a', page.items[0].relativePath, 'Config', 'hidden', 'invalid' as never)).rejects.toMatchObject({ code: 'INVALID_CONFIG_CELL_SEARCH_MODE' })

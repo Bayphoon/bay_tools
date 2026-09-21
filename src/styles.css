@@ -191,6 +191,8 @@ a { color: inherit; text-decoration: none; }
 
 .search-field { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px; border-bottom: 1px solid var(--border); color: var(--muted); }
 .search-field input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 12px; }
+.search-clear-button { flex: 0 0 auto; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; }
+.search-clear-button:hover { background: var(--surface-hover); color: var(--text); }
 .tree-panel, .json-tree-mode { height: 305px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); }
 .json-tree { height: calc(100% - 31px); overflow: auto; padding: 9px 10px; font: 12px/1.6 "Cascadia Code", monospace; }
 .json-tree-node summary { cursor: pointer; list-style-position: outside; }
@@ -439,6 +441,8 @@ a { color: inherit; text-decoration: none; }
 .config-cell-search select { align-self: stretch; max-width: 92px; border: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); outline: none; padding: 0 20px 0 7px; background: var(--surface-2); color: var(--text); font-size: 10px; }
 .config-cell-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; color: var(--text); font-size: 11px; }
 .config-cell-search button { align-self: stretch; border: 0; border-left: 1px solid var(--border); padding: 0 9px; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.config-cell-search .config-cell-search-clear { width: 27px; padding: 0; background: transparent; color: var(--muted); }
+.config-cell-search .config-cell-search-clear:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
 .config-freeze-controls { min-width: 0; display: flex; align-items: center; gap: 5px; margin-left: auto; }
 .config-font-size-controls { height: 28px; display: flex; align-items: center; gap: 3px; margin-left: auto; padding-left: 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); white-space: nowrap; }
 .config-font-size-controls > span { margin-right: 2px; color: var(--muted); }

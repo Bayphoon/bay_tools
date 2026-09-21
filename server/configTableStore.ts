@@ -536,10 +536,11 @@ export class ConfigTableStore {
   }
 
   async searchCells(branch: string, relativePath: string, sheetName: string, search: string, mode: ConfigTableCellSearchMode): Promise<ConfigTableCellMatch[]> {
-    if (mode !== 'contains' && mode !== 'exact') throw new AppError(400, 'INVALID_CONFIG_CELL_SEARCH_MODE', '不支持的单元格搜索模式')
+    if (mode !== 'tokens' && mode !== 'exact') throw new AppError(400, 'INVALID_CONFIG_CELL_SEARCH_MODE', '不支持的单元格搜索模式')
     const needle = search.trim().toLocaleLowerCase()
     if (!needle) return []
     if (needle.length > MAX_SEARCH_LENGTH) throw new AppError(400, 'CONFIG_CELL_SEARCH_TOO_LONG', `单元格搜索内容不能超过 ${MAX_SEARCH_LENGTH} 个字符`)
+    const terms = tokenizeConfigTableSearch(search)
     const { workbook } = await this.cachedWorkbook(branch, relativePath)
     const sheet = this.worksheet(workbook, sheetName)
     const matches: ConfigTableCellMatch[] = []
@@ -549,7 +550,10 @@ export class ConfigTableStore {
         if (matches.length >= MAX_CELL_MATCHES) return
         const text = configTableCellText(cell)
         const normalized = text.toLocaleLowerCase()
-        if (mode === 'exact' ? normalized === needle : normalized.includes(needle)) matches.push({ row: Number(cell.row), column: Number(cell.col), address: cell.address, text })
+        const matched = mode === 'exact'
+          ? normalized === needle
+          : terms.length > 0 && terms.every((term) => normalizedName(text).includes(term))
+        if (matched) matches.push({ row: Number(cell.row), column: Number(cell.col), address: cell.address, text })
       })
     })
     return matches

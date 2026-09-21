@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { CodeCard, CodeCardSearchMode, CodeCardSearchPage, CodeCardSearchResult, CodeCardWorkspace } from '../../shared/types'
 import { InlineError, Spinner, ToolButton } from '../components/ui'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { codeCardImageUrl, localBridge } from '../lib/api'
 import { showAppNotice } from '../lib/clipboard'
 import { clipboardReadErrorMessage, readCurrentClipboard } from '../lib/clipboardImport'
@@ -275,7 +276,7 @@ export function CodeCardsPage() {
     </header>
     <section className="code-card-global-search" aria-label="跨代码段搜索">
       <div className="code-card-search-controls">
-        <label className="code-card-search-field"><Search size={16} /><input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); setSearchPage(1) }} placeholder="搜索标题或 Lua 文本；空格分词，引号匹配短语" />{search && <button aria-label="清空代码段搜索" onClick={() => { setSearch(''); setSearchPage(1) }}><X size={14} /></button>}</label>
+        <label className="code-card-search-field"><Search size={16} /><input value={search} maxLength={200} onChange={(event) => { setSearch(event.target.value); setSearchPage(1) }} onKeyDown={(event) => clearSearchOnEscape(event, search, () => { setSearch(''); setSearchPage(1) })} placeholder="搜索标题或 Lua 文本；空格分词，引号匹配短语" /><SearchClearButton value={search} onClear={() => { setSearch(''); setSearchPage(1) }} label="清空代码段搜索" /></label>
         <div className="segmented code-card-search-mode" role="group" aria-label="代码段搜索匹配方式"><button title="空格分词，每个关键词都必须连续包含" className={searchMode === 'fuzzy' ? 'active' : undefined} onClick={() => { setSearchMode('fuzzy'); setSearchPage(1) }}>模糊搜索</button><button title="整段内容必须连续包含" className={searchMode === 'exact' ? 'active' : undefined} onClick={() => { setSearchMode('exact'); setSearchPage(1) }}>短语匹配</button></div>
         <span className="code-card-search-count">{searching ? '搜索中…' : search.trim() ? `${searchResults.total} 条` : '跨页签搜索'}</span>
       </div>

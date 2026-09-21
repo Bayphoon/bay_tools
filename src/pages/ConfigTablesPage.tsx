@@ -4,6 +4,7 @@ import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSPro
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { ConfigTableCellMatch, ConfigTableCellSearchMode, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
 import { EmptyState, PageHeader, Spinner, ToolButton } from '../components/ui'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { copyFilePath, showAppNotice } from '../lib/clipboard'
 import { clampFrozenCount, configTableRangeRequests, configTableRangeValue, gridIndexAtOffset, gridOffsetForIndex, gridTotalSize, MAX_FROZEN_COLUMNS, MAX_FROZEN_ROWS, visibleGridIndexes, type GridSizeOverrides } from '../lib/configTableViewport'
 import { localBridge } from '../lib/api'
@@ -186,7 +187,7 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [cellSearch, setCellSearch] = useState('')
-  const [cellSearchMode, setCellSearchMode] = useState<ConfigTableCellSearchMode>('contains')
+  const [cellSearchMode, setCellSearchMode] = useState<ConfigTableCellSearchMode>('tokens')
   const [matches, setMatches] = useState<ConfigTableCellMatch[]>([])
   const [matchIndex, setMatchIndex] = useState(-1)
   const [selectedCell, setSelectedCell] = useState<{ address: string; text: string }>()
@@ -277,6 +278,11 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       showAppNotice({ message: errorMessage(nextError), kind: 'error' })
     }
   }
+  const clearCellSearch = () => {
+    setCellSearch('')
+    setMatches([])
+    setMatchIndex(-1)
+  }
 
   if (loading && !workbook) return <div className="config-viewer-loading"><Spinner label="正在读取配置表" /></div>
   if (error || !workbook) return <div className="config-viewer-loading"><EmptyState title="配置表读取失败"><span>{error ?? '文件不可用'}</span><ToolButton onClick={() => void load()}>重试</ToolButton></EmptyState></div>
@@ -292,7 +298,7 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       </div>
     </header>
     <div className="config-workbook-toolbar">
-      <div className="config-cell-search"><Search size={14} /><select aria-label="表内搜索模式" value={cellSearchMode} onChange={(event) => { setCellSearchMode(event.target.value as ConfigTableCellSearchMode); setMatches([]); setMatchIndex(-1) }}><option value="contains">模糊搜索</option><option value="exact">全文匹配</option></select><input value={cellSearch} onChange={(event) => setCellSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runCellSearch() }} placeholder="搜索当前 Sheet 的单元格内容" /><button onClick={() => void runCellSearch()}>查找</button></div>
+      <div className="config-cell-search"><Search size={14} /><select aria-label="表内搜索模式" value={cellSearchMode} onChange={(event) => { setCellSearchMode(event.target.value as ConfigTableCellSearchMode); setMatches([]); setMatchIndex(-1) }}><option value="tokens">词元匹配</option><option value="exact">全文匹配</option></select><input value={cellSearch} onChange={(event) => setCellSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runCellSearch(); else clearSearchOnEscape(event, cellSearch, clearCellSearch) }} placeholder="搜索单元格内容，空格分隔词元" /><SearchClearButton value={cellSearch} onClear={clearCellSearch} label="清空表内搜索" className="config-cell-search-clear" /><button onClick={() => void runCellSearch()}>查找</button></div>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value <= 0 ? matches.length - 1 : value - 1)}><ChevronLeft size={14} /></button>
       <span>{matches.length ? `${matchIndex + 1}/${matches.length}` : '0/0'}</span>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value >= matches.length - 1 ? 0 : value + 1)}><ChevronRight size={14} /></button>
@@ -453,7 +459,7 @@ export function ConfigTablesPage() {
             <option value="current-dev" disabled={!hasLocalDev || branch === 'dev'}>当前分支 + dev</option>
           </select>
           <select value={mode} onChange={(event) => { setMode(event.target.value as ConfigTableSearchMode); setPage(1) }}><option value="tokens">词元匹配</option><option value="exact">完整文件名匹配</option></select>
-          <label><Search size={14} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="按文件名搜索，空格分隔词元" /></label>
+          <label><Search size={14} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} onKeyDown={(event) => clearSearchOnEscape(event, search, () => { setSearch(''); setPage(1) })} placeholder="按文件名搜索，空格分隔词元" /><SearchClearButton value={search} onClear={() => { setSearch(''); setPage(1) }} label="清空配置表文件搜索" /></label>
         </div>
         <div className="config-file-summary"><span>{files?.total ?? 0} 个文件</span>{loadingFiles && <span>读取中…</span>}</div>
         <div className="config-file-list">

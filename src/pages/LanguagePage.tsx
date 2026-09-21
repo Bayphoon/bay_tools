@@ -5,6 +5,7 @@ import type { LanguageEntry, LanguageEntryPage, LanguageSearchMode, LanguageSour
 import { ApiError, localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 import { PageHeader, Spinner, ToolButton } from '../components/ui'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 
 const emptyPage: LanguageEntryPage = { items: [], total: 0, page: 1, pageSize: 10, totalPages: 1 }
 
@@ -26,7 +27,7 @@ function Pagination({ data, onPage }: { data: LanguageEntryPage; onPage: (page: 
 
 function LanguageSearch({ value, mode, onChange, onModeChange, placeholder }: { value: string; mode: LanguageSearchMode; onChange: (value: string) => void; onModeChange: (mode: LanguageSearchMode) => void; placeholder: string }) {
   return <div className="language-search-controls">
-    <label className="language-search"><Search size={15} /><input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />{value && <button type="button" aria-label="清空搜索" onClick={() => onChange('')}><X size={13} /></button>}</label>
+    <label className="language-search"><Search size={15} /><input value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => clearSearchOnEscape(event, value, () => onChange(''))} placeholder={placeholder} /><SearchClearButton value={value} onClear={() => onChange('')} /></label>
     <div className="segmented language-search-mode" role="group" aria-label="搜索匹配方式"><button className={mode === 'fuzzy' ? 'active' : undefined} onClick={() => onModeChange('fuzzy')}>模糊搜索</button><button className={mode === 'exact' ? 'active' : undefined} onClick={() => onModeChange('exact')}>全文匹配</button></div>
   </div>
 }

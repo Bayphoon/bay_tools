@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES, type JsonPane, type JsonWorkspace } from '../../shared/types'
 import { JsonTree } from '../components/JsonTree'
 import { JsonTextEditor } from '../components/JsonTextEditor'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { CopyButton, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { useAutoFormatJson } from '../hooks/useAutoFormatJson'
 import { ApiError, localBridge } from '../lib/api'
@@ -51,7 +52,7 @@ function Pane({ pane, onChange, onRename, onClear, onRemove, differences, autoFo
   useAutoFormatJson(pane.text, autoFormat && pane.view === 'text', (text) => onChange({ text }))
   return <section className="json-pane">
     <div className="json-pane-toolbar"><button className="json-pane-title" onClick={onRename} title="点击重命名"><span>{pane.title}</span><Pencil size={11} /></button><span className="json-pane-toolbar-divider" /><ToolButton onClick={() => onChange({ view: pane.view === 'text' ? 'tree' : 'text' })}><ListTree size={14} />{pane.view === 'text' ? '树形' : '原文'}</ToolButton><ToolButton onClick={() => format(2)}>格式化</ToolButton><ToolButton onClick={() => format()}>压缩</ToolButton><CopyButton value={pane.text} /><span className="json-pane-toolbar-divider" /><span className={'value' in parsed ? 'valid-state' : 'invalid-state'}>{'value' in parsed ? '有效' : '无效'}</span><div className="toolbar-spacer" /><button className="json-pane-action" onClick={onClear} title="清空内容" aria-label={`清空 ${pane.title}`}><Eraser size={13} /></button><button className="json-pane-action danger" disabled={!canRemove} onClick={onRemove} title={canRemove ? '移除面板' : `至少保留 ${JSON_WORKSPACE_MIN_PANES} 个面板`} aria-label={`移除 ${pane.title}`}><X size={14} /></button></div>
-    {pane.view === 'text' ? <JsonTextEditor value={pane.text} onChange={(text) => onChange({ text })} /> : <div className="json-tree-mode"><label className="search-field"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索键或值" /></label><JsonTree text={pane.text} search={search} differences={differences} /></div>}
+    {pane.view === 'text' ? <JsonTextEditor value={pane.text} onChange={(text) => onChange({ text })} /> : <div className="json-tree-mode"><label className="search-field"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => clearSearchOnEscape(event, search, () => setSearch(''))} placeholder="搜索键或值" /><SearchClearButton value={search} onClear={() => setSearch('')} label={`清空 ${pane.title} 搜索`} /></label><JsonTree text={pane.text} search={search} differences={differences} /></div>}
     {'error' in parsed && <div className="json-error-bar"><AlertTriangle size={14} />{parsed.error}</div>}
   </section>
 }

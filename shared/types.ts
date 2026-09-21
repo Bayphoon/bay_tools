@@ -227,7 +227,7 @@ export interface ServerStatusState {
 }
 
 export type ConfigTableSearchMode = 'tokens' | 'exact'
-export type ConfigTableCellSearchMode = 'contains' | 'exact'
+export type ConfigTableCellSearchMode = 'tokens' | 'exact'
 
 export interface ConfigTableBranch {
   name: string
