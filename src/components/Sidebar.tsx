@@ -479,7 +479,9 @@ export function Sidebar() {
         </div>
         {configTablesOpen && <div className="nav-children">{configTables?.branches.map((branch) => <div className="nav-child-wrap" key={branch.name}>
           <NavLink className={`nav-tree-row nav-file ${branch.local ? '' : 'remote-only'}`} to={`/config-tables/${encodeURIComponent(branch.name)}`}><FileSpreadsheet size={13} /><span title={branch.local ? branch.name : `${branch.name}（远程，未下载）`}>{branch.name}</span></NavLink>
-          <Menu>{branch.local ? <>{item('SVN 更新当前分支', async () => {
+          <Menu>{item(branch.pinned ? '取消置顶' : '置顶分支', async () => {
+            try { useAppStore.setState({ configTables: await localBridge.setConfigTableBranchPinned(branch.name, !branch.pinned) }) } catch (error) { window.alert(error instanceof Error ? error.message : '置顶失败') }
+          })}{branch.local ? <>{item('SVN 更新当前分支', async () => {
             try { useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : 'SVN 更新失败') }
           })}{item('重新扫描内容', async () => {
             try { useAppStore.setState({ configTables: await localBridge.scanConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : '扫描失败') }

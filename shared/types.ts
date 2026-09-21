@@ -232,6 +232,7 @@ export interface ConfigTableBranch {
   name: string
   local: boolean
   remote: boolean
+  pinned: boolean
   fileCount?: number
   lastScannedAt?: string
 }
@@ -556,6 +557,7 @@ export interface LocalBridge {
   setConfigTableRoot(path: string): Promise<ConfigTableState>
   refreshConfigTableLocal(): Promise<ConfigTableState>
   syncConfigTableRemote(): Promise<ConfigTableState>
+  setConfigTableBranchPinned(branch: string, pinned: boolean): Promise<ConfigTableState>
   scanConfigTableBranch(branch: string): Promise<ConfigTableState>
   updateConfigTableBranch(branch: string): Promise<ConfigTableState>
   downloadConfigTableBranch(branch: string): Promise<ConfigTableState>

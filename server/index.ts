@@ -29,7 +29,7 @@ const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
-const apiVersion = 19
+const apiVersion = 21
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -144,6 +144,10 @@ app.get('/api/config-tables', async () => configTableStore.getState())
 app.put<{ Body: { path: string } }>('/api/config-tables/root', async (request) => configTableStore.setRootPath(request.body?.path ?? ''))
 app.post('/api/config-tables/refresh-local', async () => configTableStore.refreshLocalBranches())
 app.post('/api/config-tables/sync-remote', async () => configTableStore.syncRemoteBranches())
+app.patch<{ Params: { branch: string }; Body: { pinned: boolean } }>('/api/config-tables/branches/:branch/pin', async (request) => {
+  if (typeof request.body?.pinned !== 'boolean') throw new AppError(400, 'INVALID_PIN_STATE', '置顶状态必须是布尔值')
+  return configTableStore.setBranchPinned(request.params.branch, request.body.pinned)
+})
 app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/scan', async (request) => configTableStore.scanBranch(request.params.branch))
 app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/update', async (request) => configTableStore.updateBranch(request.params.branch))
 app.post<{ Params: { branch: string } }>('/api/config-tables/branches/:branch/download', async (request) => configTableStore.downloadBranch(request.params.branch))
