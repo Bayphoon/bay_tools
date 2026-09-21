@@ -44,20 +44,26 @@ describe('config table filename search', () => {
     expect(configTableFileMatches('GetConfigState.xlsx', 'gcs', 'tokens')).toBe(false)
   })
 
-  it('matches an exact stem or full xlsx filename', () => {
+  it('matches an exact stem or full xlsx/xlsm filename', () => {
     expect(configTableFileMatches('hero_skill.xlsx', 'hero_skill', 'exact')).toBe(true)
     expect(configTableFileMatches('hero_skill.xlsx', 'hero_skill.xlsx', 'exact')).toBe(true)
+    expect(configTableFileMatches('hero_skill.xlsm', 'hero_skill', 'exact')).toBe(true)
+    expect(configTableFileMatches('hero_skill.xlsm', 'hero_skill.xlsm', 'exact')).toBe(true)
+    expect(configTableFileMatches('hero_skill.xlsm', 'hero_skill.xlsx', 'exact')).toBe(false)
     expect(configTableFileMatches('hero_skill_copy.xlsx', 'hero_skill', 'exact')).toBe(false)
   })
 })
 
 describe('ConfigTableStore', () => {
-  it('scans local branch xlsx files and reads workbook ranges without recalculating formulas', async () => {
+  it('scans local xlsx and xlsm files and reads workbook ranges without recalculating formulas or macros', async () => {
     const { projectRoot, configRoot, branchRoot } = await fixture()
     await mkdir(join(configRoot, '.hidden_branch'), { recursive: true })
     await mkdir(join(branchRoot, 'nested'), { recursive: true })
     await writeWorkbook(join(branchRoot, 'nested', 'hero_skill.xlsx'))
+    await writeWorkbook(join(branchRoot, 'nested', 'macro_config.xlsm'))
     await writeFile(join(branchRoot, '~$hero_skill.xlsx'), 'temporary')
+    await writeFile(join(branchRoot, '~$macro_config.xlsm'), 'temporary')
+    await writeFile(join(branchRoot, 'legacy.xls'), 'ignored')
     await writeFile(join(branchRoot, 'notes.txt'), 'ignored')
     const store = new ConfigTableStore(projectRoot, { rootPath: configRoot })
     await store.init()
@@ -68,10 +74,16 @@ describe('ConfigTableStore', () => {
     expect(state.branches.some((branch) => branch.name === '.hidden_branch')).toBe(false)
 
     state = await store.scanBranch('feature_a')
-    expect(state.branches[0]).toMatchObject({ name: 'feature_a', fileCount: 1 })
+    expect(state.branches[0]).toMatchObject({ name: 'feature_a', fileCount: 2 })
     const page = await store.searchFiles('feature_a', false, 'hero skill', 'tokens', 1)
     expect(page.items).toHaveLength(1)
     expect(page.items[0].relativePath).toBe('nested/hero_skill.xlsx')
+
+    const macroPage = await store.searchFiles('feature_a', false, 'macro config', 'tokens', 1)
+    expect(macroPage.items).toHaveLength(1)
+    expect(macroPage.items[0].relativePath).toBe('nested/macro_config.xlsm')
+    const macroWorkbook = await store.getWorkbook('feature_a', macroPage.items[0].relativePath)
+    expect(macroWorkbook.sheets[0]).toEqual({ name: 'Config', rowCount: 3, columnCount: 3 })
 
     const workbook = await store.getWorkbook('feature_a', page.items[0].relativePath)
     expect(workbook.sheets).toEqual([
@@ -94,6 +106,22 @@ describe('ConfigTableStore', () => {
     await store.init()
     await expect(store.getFileLocation('feature_a', '../outside.xlsx')).rejects.toMatchObject({ code: 'INVALID_CONFIG_FILE_PATH' })
     await expect(store.getFileLocation('../other', 'file.xlsx')).rejects.toMatchObject({ code: 'INVALID_CONFIG_BRANCH' })
+  })
+
+  it('rescans legacy branch indexes after supported file types change', async () => {
+    const { projectRoot, configRoot, branchRoot } = await fixture()
+    await writeWorkbook(join(branchRoot, 'macro_config.xlsm'))
+    const store = new ConfigTableStore(projectRoot, { rootPath: configRoot })
+    await store.init()
+    await writeFile(join(projectRoot, 'Doc', 'config-table', 'index.json'), JSON.stringify({
+      schemaVersion: 1,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      branches: { feature_a: { scannedAt: '2026-01-01T00:00:00.000Z', files: [] } },
+    }))
+
+    const page = await store.searchFiles('feature_a', false, 'macro config', 'tokens', 1)
+    expect(page.items).toMatchObject([{ name: 'macro_config.xlsm', relativePath: 'macro_config.xlsm' }])
+    expect((await store.getState()).branches[0]).toMatchObject({ name: 'feature_a', fileCount: 1 })
   })
 
   it('persists pinned branches and orders them before unpinned branches', async () => {

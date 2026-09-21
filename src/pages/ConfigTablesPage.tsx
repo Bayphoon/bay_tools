@@ -280,6 +280,7 @@ export function ConfigTablesPage() {
   const [error, setError] = useState<string>()
   const branchState = configTables?.branches.find((item) => item.name === branch)
   const hasLocalDev = configTables?.branches.some((item) => item.name === 'dev' && item.local) ?? false
+  const branchFileCount = !includeDev && !deferredSearch.trim() && files ? files.total : branchState?.fileCount ?? 0
 
   const updateState = async (action: () => Promise<typeof configTables>, label: string) => {
     setBusy(label)
@@ -325,7 +326,7 @@ export function ConfigTablesPage() {
   }, [branch, branchState?.local, includeDev, deferredSearch, mode, page, configTables?.revision])
 
   if (!branch) return <main className="page config-table-page config-table-home">
-    <PageHeader title="配置表" description="只读查看 SVN 工作副本中的 XLSX 配置表" actions={<>
+    <PageHeader title="配置表" description="只读查看 SVN 工作副本中的 XLSX / XLSM 配置表" actions={<>
       <ToolButton disabled={Boolean(busy) || !configTables?.rootPath} onClick={() => void updateState(() => localBridge.refreshConfigTableLocal(), '刷新本地分支列表')}><RefreshCw size={14} />刷新本地列表</ToolButton>
       <ToolButton disabled={Boolean(busy) || !configTables?.rootPath} onClick={() => void updateState(() => localBridge.syncConfigTableRemote(), '同步远程分支列表')}><Download size={14} />同步远程列表</ToolButton>
     </>} />
@@ -340,7 +341,7 @@ export function ConfigTablesPage() {
     {!configTables?.rootPath ? <EmptyState title="请先设置配置表目录"><span>选择包含各个分支子目录的 SVN 工作副本目录。</span></EmptyState> : <section className="config-branch-grid">
       {configTables.branches.length ? configTables.branches.map((item) => <article key={item.name} className={`config-branch-card ${item.local ? '' : 'remote-only'}`}>
         <div className="config-branch-icon"><Table2 size={20} /></div>
-        <div><strong>{item.name}</strong><span>{item.local ? (item.fileCount === undefined ? '尚未扫描' : `${item.fileCount} 个 XLSX`) : '远程分支，尚未下载'}</span>{item.lastScannedAt && <small>扫描于 {new Date(item.lastScannedAt).toLocaleString()}</small>}</div>
+        <div><strong>{item.name}</strong><span>{item.local ? (item.fileCount === undefined ? '尚未扫描' : `${item.fileCount} 个配置表`) : '远程分支，尚未下载'}</span>{item.lastScannedAt && <small>扫描于 {new Date(item.lastScannedAt).toLocaleString()}</small>}</div>
         {item.local ? <ToolButton onClick={() => navigate(`/config-tables/${encodeURIComponent(item.name)}`)}>打开</ToolButton> : <ToolButton disabled={Boolean(busy)} onClick={async () => {
           if (await updateState(() => localBridge.downloadConfigTableBranch(item.name), `下载分支 ${item.name}`)) navigate(`/config-tables/${encodeURIComponent(item.name)}`)
         }}><Download size={14} />下载</ToolButton>}
@@ -353,7 +354,7 @@ export function ConfigTablesPage() {
 
   return <main className="config-table-page config-branch-page">
     <header className="config-branch-header">
-      <div><Link to="/config-tables">配置表</Link><ChevronRight size={13} /><h1>{branch}</h1><span>{branchState.fileCount ?? 0} 个 XLSX</span></div>
+      <div><Link to="/config-tables">配置表</Link><ChevronRight size={13} /><h1>{branch}</h1><span>{branchFileCount} 个配置表</span></div>
       <div>
         <ToolButton disabled={Boolean(busy)} onClick={async () => { if (await updateState(() => localBridge.updateConfigTableBranch(branch), `SVN 更新 ${branch}`)) setPage(1) }}><Download size={14} />SVN 更新当前分支</ToolButton>
         <ToolButton disabled={Boolean(busy)} onClick={async () => { if (await updateState(() => localBridge.scanConfigTableBranch(branch), `重新扫描 ${branch}`)) setPage(1) }}><RefreshCw size={14} />重新扫描内容</ToolButton>
@@ -383,7 +384,7 @@ export function ConfigTablesPage() {
         </div>
         <footer className="config-file-pagination"><button disabled={!files || files.page <= 1} onClick={() => setPage((value) => value - 1)}><ChevronLeft size={14} /></button><span>{files?.page ?? 1} / {files?.totalPages ?? 1}</span><button disabled={!files || files.page >= files.totalPages} onClick={() => setPage((value) => value + 1)}><ChevronRight size={14} /></button></footer>
       </aside>
-      <div className="config-viewer-panel">{selected ? <WorkbookViewer key={`${selected.branch}:${selected.relativePath}`} file={selected} /> : <EmptyState title="选择一个配置表"><span>在左侧选择 XLSX 文件后查看内容。</span></EmptyState>}</div>
+      <div className="config-viewer-panel">{selected ? <WorkbookViewer key={`${selected.branch}:${selected.relativePath}`} file={selected} /> : <EmptyState title="选择一个配置表"><span>在左侧选择 XLSX 或 XLSM 文件后查看内容。</span></EmptyState>}</div>
     </div>
   </main>
 }

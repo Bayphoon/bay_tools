@@ -26,6 +26,9 @@ const MAX_RANGE_ROWS = 200
 const MAX_RANGE_COLUMNS = 50
 const MAX_CELL_MATCHES = 200
 const CACHE_LIMIT = 3
+const CONFIG_TABLE_EXTENSIONS = new Set(['.xlsx', '.xlsm'])
+const CONFIG_TABLE_EXTENSION_PATTERN = /\.(xlsx|xlsm)$/i
+const CONFIG_TABLE_SCAN_VERSION = 2
 const DEFAULT_ROOTS = [
   'D:\\repo\\trunk_top_lords\\trunk',
   'D:\\repo\\trunk\\_top\\_lords\\trunk',
@@ -43,6 +46,7 @@ interface PersistedConfigTableState {
 }
 
 interface ConfigTableBranchIndex {
+  scanVersion?: number
   scannedAt: string
   files: ConfigTableFile[]
 }
@@ -89,10 +93,10 @@ export function tokenizeConfigTableSearch(value: string): string[] {
 }
 
 export function configTableFileMatches(fileName: string, search: string, mode: ConfigTableSearchMode): boolean {
-  const stem = fileName.toLocaleLowerCase().replace(/\.xlsx$/i, '')
+  const stem = fileName.toLocaleLowerCase().replace(CONFIG_TABLE_EXTENSION_PATTERN, '')
   const query = search.trim().toLocaleLowerCase()
   if (!query) return true
-  if (mode === 'exact') return stem === query.replace(/\.xlsx$/i, '') || fileName.toLocaleLowerCase() === query
+  if (mode === 'exact') return CONFIG_TABLE_EXTENSION_PATTERN.test(query) ? fileName.toLocaleLowerCase() === query : stem === query
   const haystack = normalizedName(stem)
   const terms = tokenizeConfigTableSearch(search)
   return terms.length > 0 && terms.every((term) => haystack.includes(term))
@@ -108,8 +112,8 @@ function normalizeRelativeFilePath(value: string): string {
   if (!normalized || normalized.startsWith('/') || isAbsolute(value) || normalized.split('/').some((part) => !part || part === '.' || part === '..')) {
     throw new AppError(400, 'INVALID_CONFIG_FILE_PATH', '配置表文件路径无效')
   }
-  if (extname(normalized).toLocaleLowerCase() !== '.xlsx' || basename(normalized).startsWith('~$')) {
-    throw new AppError(400, 'INVALID_CONFIG_FILE_TYPE', '只支持读取 .xlsx 配置表')
+  if (!CONFIG_TABLE_EXTENSIONS.has(extname(normalized).toLocaleLowerCase()) || basename(normalized).startsWith('~$')) {
+    throw new AppError(400, 'INVALID_CONFIG_FILE_TYPE', '只支持读取 .xlsx 和 .xlsm 配置表')
   }
   return normalized
 }
@@ -235,7 +239,7 @@ export class ConfigTableStore {
       local: localBranches.includes(name),
       remote: state.remoteBranches.includes(name),
       pinned: pinned.has(name),
-      ...(index.branches[name] ? { fileCount: index.branches[name].files.length, lastScannedAt: index.branches[name].scannedAt } : {}),
+      ...(index.branches[name]?.scanVersion === CONFIG_TABLE_SCAN_VERSION ? { fileCount: index.branches[name].files.length, lastScannedAt: index.branches[name].scannedAt } : {}),
     }))
     const { remoteBranches: _remoteBranches, pinnedBranches: _pinnedBranches, ...publicFields } = state
     return { ...publicFields, branches }
@@ -387,7 +391,7 @@ export class ConfigTableStore {
         const path = join(directory, entry.name)
         if (entry.isDirectory()) {
           await visit(path)
-        } else if (entry.isFile() && !entry.name.startsWith('~$') && extname(entry.name).toLocaleLowerCase() === '.xlsx') {
+        } else if (entry.isFile() && !entry.name.startsWith('~$') && CONFIG_TABLE_EXTENSIONS.has(extname(entry.name).toLocaleLowerCase())) {
           const info = await stat(path)
           files.push({
             branch,
@@ -401,7 +405,7 @@ export class ConfigTableStore {
     }
     await visit(branchRoot)
     files.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN', { numeric: true }) || left.relativePath.localeCompare(right.relativePath, 'zh-CN', { numeric: true }))
-    const branchIndex = { scannedAt: now(), files }
+    const branchIndex = { scanVersion: CONFIG_TABLE_SCAN_VERSION, scannedAt: now(), files }
     const index = await this.index()
     index.branches[branch] = branchIndex
     index.updatedAt = now()
@@ -412,7 +416,8 @@ export class ConfigTableStore {
   private async branchIndex(branch: string): Promise<ConfigTableBranchIndex> {
     const name = normalizeBranchName(branch)
     const index = await this.index()
-    return index.branches[name] ?? this.scanBranchFiles(name)
+    const cached = index.branches[name]
+    return cached?.scanVersion === CONFIG_TABLE_SCAN_VERSION ? cached : this.scanBranchFiles(name)
   }
 
   async searchFiles(branch: string, includeDev: boolean, search: string, mode: ConfigTableSearchMode, page: number): Promise<ConfigTableFilePage> {
