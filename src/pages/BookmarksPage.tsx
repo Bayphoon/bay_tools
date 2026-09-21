@@ -1,13 +1,13 @@
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
-import { BookOpen, Bookmark, Cloud, Code2, Copy, Database, FileText, Gamepad2, GitBranch, Globe2, Grid2X2, Link2, List, MessageSquare, PanelsTopLeft, Pencil, Plus, Server, Star, Trash2, Upload, Wrench, type LucideIcon } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
+import { BookOpen, Bookmark, ClipboardPaste, Cloud, Code2, Copy, Database, FileText, Gamepad2, GitBranch, Globe2, Grid2X2, Link2, List, MessageSquare, PanelsTopLeft, Pencil, Plus, Server, Star, Trash2, Upload, Wrench, type LucideIcon } from 'lucide-react'
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type MouseEvent } from 'react'
 import { BOOKMARK_BUILTIN_ICONS, BOOKMARK_ICON_MAX_UPLOAD_SIZE, type BookmarkBuiltinIcon, type BookmarkItem, type BookmarkLayout, type BookmarkLibrary } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { ApiError, bookmarkIconUrl, localBridge } from '../lib/api'
 import { showAppNotice } from '../lib/clipboard'
 import { confirmAction } from '../lib/confirmation'
 
-const iconComponents: Record<BookmarkBuiltinIcon, LucideIcon> = {
+const iconComponents: Partial<Record<BookmarkBuiltinIcon, LucideIcon>> = {
   link: Link2,
   globe: Globe2,
   code: Code2,
@@ -25,6 +25,24 @@ const iconComponents: Record<BookmarkBuiltinIcon, LucideIcon> = {
 
 const iconLabels: Record<BookmarkBuiltinIcon, string> = {
   link: '链接', globe: '网站', code: '代码', book: '文档', github: 'GitHub', server: '服务器', database: '数据库', cloud: '云服务', game: '游戏', tool: '工具', file: '文件', message: '消息', star: '收藏',
+  jenkins: 'Jenkins', gitlab: 'GitLab', deepseek: 'DeepSeek', chatgpt: 'ChatGPT', claude: 'Claude Code', glm: 'GLM', bilibili: '哔哩哔哩',
+}
+
+const brandMarks: Partial<Record<BookmarkBuiltinIcon, { text: string; color: string }>> = {
+  jenkins: { text: 'J', color: '#D24939' },
+  gitlab: { text: 'GL', color: '#FC6D26' },
+  deepseek: { text: 'DS', color: '#4D6BFE' },
+  chatgpt: { text: 'GPT', color: '#10A37F' },
+  claude: { text: 'C', color: '#D97757' },
+  glm: { text: 'GLM', color: '#246BFD' },
+  bilibili: { text: 'B', color: '#00AEEC' },
+}
+
+function BookmarkBuiltinGlyph({ name, size = 30 }: { name: BookmarkBuiltinIcon; size?: number }) {
+  const Icon = iconComponents[name]
+  if (Icon) return <Icon size={size} />
+  const brand = brandMarks[name] ?? { text: iconLabels[name].slice(0, 2), color: 'var(--accent)' }
+  return <span className="bookmark-brand-mark" style={{ '--bookmark-brand-color': brand.color, '--bookmark-brand-size': `${size}px` } as CSSProperties}>{brand.text}</span>
 }
 
 function errorMessage(error: unknown): string {
@@ -35,8 +53,7 @@ function BookmarkGlyph({ item, previewUrl, size = 30 }: { item?: BookmarkItem; p
   if (previewUrl) return <img className="bookmark-local-icon" src={previewUrl} alt="本地图标预览" />
   if (item?.icon.kind === 'local') return <img className="bookmark-local-icon" src={bookmarkIconUrl(item.id, item.icon.updatedAt)} alt="" />
   const name = item?.icon.kind === 'builtin' ? item.icon.name : 'link'
-  const Icon = iconComponents[name]
-  return <Icon size={size} />
+  return <BookmarkBuiltinGlyph name={name} size={size} />
 }
 
 export function openBookmarkInNewTab(url: string): void {
@@ -63,6 +80,7 @@ function BookmarkEditorDialog({ item, onClose, onSave }: {
   const [iconFile, setIconFile] = useState<File>()
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [saving, setSaving] = useState(false)
+  const [clipboardBusy, setClipboardBusy] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -87,6 +105,31 @@ function BookmarkEditorDialog({ item, onClose, onSave }: {
     setIconFile(file)
   }
 
+  const readClipboardImage = async () => {
+    if (!navigator.clipboard?.read) {
+      setError('当前浏览器不支持直接读取剪贴板图片，请使用本地上传')
+      return
+    }
+    setClipboardBusy(true)
+    setError('')
+    try {
+      const clipboardItems = await navigator.clipboard.read()
+      for (const clipboardItem of clipboardItems) {
+        const imageType = clipboardItem.types.find((type) => ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/x-icon', 'image/vnd.microsoft.icon'].includes(type))
+        if (!imageType) continue
+        const blob = await clipboardItem.getType(imageType)
+        const extension = imageType === 'image/jpeg' ? 'jpg' : imageType.includes('icon') ? 'ico' : imageType.slice('image/'.length)
+        selectLocalIcon(new File([blob], `clipboard-icon-${Date.now()}.${extension}`, { type: imageType, lastModified: Date.now() }))
+        return
+      }
+      setError('剪贴板中没有可用的图片')
+    } catch (clipboardError) {
+      setError(clipboardError instanceof Error && clipboardError.name === 'NotAllowedError' ? '浏览器未允许读取剪贴板，请授权后重试' : `读取剪贴板失败：${errorMessage(clipboardError)}`)
+    } finally {
+      setClipboardBusy(false)
+    }
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (iconMode === 'local' && !iconFile && item?.icon.kind !== 'local') {
@@ -104,17 +147,16 @@ function BookmarkEditorDialog({ item, onClose, onSave }: {
     }
   }
 
-  const previewItem = iconMode === 'local' ? item : item
   return <AlertDialog.Root open onOpenChange={(open) => { if (!open && !saving) onClose() }}>
     <AlertDialog.Portal>
       <AlertDialog.Overlay className="bookmark-dialog-overlay" />
       <AlertDialog.Content className="bookmark-dialog-card">
         <form onSubmit={(event) => void submit(event)}>
-          <header><div className="bookmark-dialog-preview">{iconMode === 'builtin' ? (() => { const Icon = iconComponents[builtinIcon]; return <Icon size={34} /> })() : <BookmarkGlyph item={previewItem} previewUrl={previewUrl} size={34} />}</div><div><AlertDialog.Title>{item ? '编辑书签' : '新增书签'}</AlertDialog.Title><AlertDialog.Description>设置标题、链接和用于识别的图标。</AlertDialog.Description></div></header>
+          <header><div className="bookmark-dialog-preview">{iconMode === 'builtin' ? <BookmarkBuiltinGlyph name={builtinIcon} size={34} /> : <BookmarkGlyph item={item} previewUrl={previewUrl} size={34} />}</div><div><AlertDialog.Title>{item ? '编辑书签' : '新增书签'}</AlertDialog.Title><AlertDialog.Description>设置标题、链接和用于识别的图标。</AlertDialog.Description></div></header>
           <label className="field-label">书签标题<input className="field" autoFocus maxLength={120} required value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：JSON Editor Online" /></label>
           <label className="field-label">书签链接<input className="field mono" required value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com" /></label>
-          <fieldset className="bookmark-icon-fieldset"><legend>书签图标</legend><div className="bookmark-icon-source"><button type="button" className={iconMode === 'builtin' ? 'active' : ''} onClick={() => setIconMode('builtin')}>内置图标</button><button type="button" className={iconMode === 'local' ? 'active' : ''} onClick={() => setIconMode('local')}>本地图标</button></div>
-            {iconMode === 'builtin' ? <div className="bookmark-icon-options">{BOOKMARK_BUILTIN_ICONS.map((name) => { const Icon = iconComponents[name]; return <button type="button" key={name} className={builtinIcon === name ? 'active' : ''} title={iconLabels[name]} aria-label={`使用${iconLabels[name]}图标`} onClick={() => setBuiltinIcon(name)}><Icon size={19} /><span>{iconLabels[name]}</span></button> })}</div> : <label className="bookmark-local-picker"><Upload size={18} /><span>{iconFile?.name ?? (item?.icon.kind === 'local' ? '保留当前图标，或选择新文件' : '选择本地图标')}</span><small>PNG / JPEG / WebP / GIF / ICO，最大 2 MiB</small><input type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.ico,image/png,image/jpeg,image/webp,image/gif,image/x-icon" onChange={(event) => selectLocalIcon(event.target.files?.[0])} /></label>}
+          <fieldset className="bookmark-icon-fieldset"><legend>书签图标</legend><div className="bookmark-icon-source"><button type="button" className={iconMode === 'builtin' ? 'active' : ''} onClick={() => setIconMode('builtin')}>内置图标</button><button type="button" className={iconMode === 'local' ? 'active' : ''} onClick={() => setIconMode('local')}>自定义图标</button></div>
+            {iconMode === 'builtin' ? <div className="bookmark-icon-options">{BOOKMARK_BUILTIN_ICONS.map((name) => <button type="button" key={name} className={builtinIcon === name ? 'active' : ''} title={iconLabels[name]} aria-label={`使用${iconLabels[name]}图标`} onClick={() => setBuiltinIcon(name)}><BookmarkBuiltinGlyph name={name} size={19} /><span>{iconLabels[name]}</span></button>)}</div> : <div className="bookmark-custom-icon"><div className="bookmark-custom-icon-actions"><label className="bookmark-custom-icon-action"><Upload size={20} /><strong>本地上传</strong><span>选择图片文件</span><input type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.ico,image/png,image/jpeg,image/webp,image/gif,image/x-icon" onChange={(event) => selectLocalIcon(event.target.files?.[0])} /></label><button type="button" className="bookmark-custom-icon-action" aria-label="读取剪贴板图片" disabled={clipboardBusy} onClick={() => void readClipboardImage()}><ClipboardPaste size={20} /><strong>{clipboardBusy ? '读取中…' : '读取剪贴板图片'}</strong><span>使用当前剪贴板图片</span></button></div><div className="bookmark-custom-icon-status"><div><BookmarkGlyph item={item} previewUrl={previewUrl} size={30} /></div><span>{iconFile?.name ?? (item?.icon.kind === 'local' ? '继续使用当前本地图标' : '尚未选择自定义图标')}</span><small>PNG / JPEG / WebP / GIF / ICO，最大 2 MiB</small></div></div>}
           </fieldset>
           <InlineError>{error}</InlineError>
           <footer><AlertDialog.Cancel asChild><button type="button" disabled={saving}>取消</button></AlertDialog.Cancel><button className="primary" type="submit" disabled={saving}>{saving ? '保存中…' : '保存书签'}</button></footer>

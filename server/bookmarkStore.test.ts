@@ -56,4 +56,12 @@ describe('BookmarkStore', () => {
     const created = await store.create({ title: '安全测试', url: 'https://example.com', builtinIcon: 'link', revision: initial.revision })
     await expect(store.uploadIcon(created.items[0]!.id, Readable.from('svg'), { mimeType: 'image/svg+xml', size: 3, revision: created.revision })).rejects.toMatchObject({ code: 'BOOKMARK_ICON_TYPE_UNSUPPORTED' })
   })
+
+  it('accepts built-in brand icons', async () => {
+    const initial = await store.getLibrary()
+    const created = await store.create({ title: 'Jenkins', url: 'https://jenkins.example.com', builtinIcon: 'jenkins', revision: initial.revision })
+    expect(created.items[0]?.icon).toEqual({ kind: 'builtin', name: 'jenkins' })
+    const updated = await store.update(created.items[0]!.id, { title: 'AI', url: 'https://ai.example.com', favorite: false, builtinIcon: 'chatgpt', revision: created.revision })
+    expect(updated.items[0]?.icon).toEqual({ kind: 'builtin', name: 'chatgpt' })
+  })
 })

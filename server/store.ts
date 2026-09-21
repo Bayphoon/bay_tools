@@ -43,9 +43,10 @@ import type {
   MarkdownTreeNode,
   MarkdownUiState,
   RestoreResult,
+  SidebarToolId,
   TrashItem,
 } from '../shared/types.js'
-import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES } from '../shared/types.js'
+import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES, SIDEBAR_TOOL_IDS } from '../shared/types.js'
 import { AppError, ConflictError } from './errors.js'
 import { atomicWrite, exists, readJson, recoverAtomicArtifacts, writeJson } from './filesystem.js'
 
@@ -273,7 +274,7 @@ function defaultSettings(): AppSettings {
       sunset: '19:00',
       transitionMinutes: 30,
     },
-    sidebar: { collapsedGroups: [], width: 252 },
+    sidebar: { collapsedGroups: [], width: 252, toolOrder: [...SIDEBAR_TOOL_IDS] },
     workSchedule: {
       workDays: [1, 2, 3, 4, 5],
       start: '10:00',
@@ -283,6 +284,18 @@ function defaultSettings(): AppSettings {
       end: '19:30',
     },
   }
+}
+
+function normalizeSettings(value: AppSettings): AppSettings {
+  const known = new Set<string>(SIDEBAR_TOOL_IDS)
+  const toolOrder: SidebarToolId[] = []
+  for (const id of value.sidebar.toolOrder ?? []) {
+    if (known.has(id) && !toolOrder.includes(id)) toolOrder.push(id)
+  }
+  for (const id of SIDEBAR_TOOL_IDS) {
+    if (!toolOrder.includes(id)) toolOrder.push(id)
+  }
+  return { ...value, sidebar: { ...value.sidebar, toolOrder } }
 }
 
 function ensureSafeRelative(input: string): string {
@@ -376,13 +389,13 @@ export class BayToolsStore {
   }
 
   async getSettings(): Promise<AppSettings> {
-    return readJson<AppSettings>(this.settingsPath)
+    return normalizeSettings(await readJson<AppSettings>(this.settingsPath))
   }
 
   async updateSettings(next: AppSettings): Promise<AppSettings> {
     const current = await this.getSettings()
     if (current.revision !== next.revision) throw new ConflictError('设置已在其他窗口中修改', current)
-    const value = { ...next, schemaVersion: 1 as const, revision: next.revision + 1, updatedAt: now() }
+    const value = normalizeSettings({ ...next, schemaVersion: 1 as const, revision: next.revision + 1, updatedAt: now() })
     await writeJson(this.settingsPath, value)
     return value
   }

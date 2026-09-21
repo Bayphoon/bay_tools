@@ -1,5 +1,8 @@
 export type ThemeMode = 'light' | 'dark' | 'manual' | 'solar'
 
+export const SIDEBAR_TOOL_IDS = ['bookmarks', 'json', 'markdown', 'code-cards', 'files', 'config-tables', 'timestamp', 'color', 'translation', 'language', 'server-status'] as const
+export type SidebarToolId = typeof SIDEBAR_TOOL_IDS[number]
+
 export interface AppSettings {
   schemaVersion: 1
   updatedAt: string
@@ -16,6 +19,7 @@ export interface AppSettings {
   sidebar: {
     collapsedGroups: string[]
     width: number
+    toolOrder?: SidebarToolId[]
   }
   workSchedule: {
     workDays: number[]
@@ -413,7 +417,7 @@ export interface CodeCardSearchPage {
 
 export const CODE_CARD_IMAGE_MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
-export const BOOKMARK_BUILTIN_ICONS = ['link', 'globe', 'code', 'book', 'github', 'server', 'database', 'cloud', 'game', 'tool', 'file', 'message', 'star'] as const
+export const BOOKMARK_BUILTIN_ICONS = ['link', 'globe', 'code', 'book', 'github', 'server', 'database', 'cloud', 'game', 'tool', 'file', 'message', 'star', 'jenkins', 'gitlab', 'deepseek', 'chatgpt', 'claude', 'glm', 'bilibili'] as const
 export type BookmarkBuiltinIcon = typeof BOOKMARK_BUILTIN_ICONS[number]
 export type BookmarkLayout = 'list' | 'grid' | 'large'
 
