@@ -7,6 +7,7 @@ import type { Cell, Workbook, Worksheet } from 'exceljs'
 import type {
   ConfigTableBranch,
   ConfigTableCellMatch,
+  ConfigTableCellSearchMode,
   ConfigTableFile,
   ConfigTableFilePage,
   ConfigTableRange,
@@ -534,7 +535,8 @@ export class ConfigTableStore {
     return { sheet: sheet.name, startRow: safeStartRow, startColumn: safeStartColumn, rowCount: safeRowCount, columnCount: safeColumnCount, values }
   }
 
-  async searchCells(branch: string, relativePath: string, sheetName: string, search: string): Promise<ConfigTableCellMatch[]> {
+  async searchCells(branch: string, relativePath: string, sheetName: string, search: string, mode: ConfigTableCellSearchMode): Promise<ConfigTableCellMatch[]> {
+    if (mode !== 'contains' && mode !== 'exact') throw new AppError(400, 'INVALID_CONFIG_CELL_SEARCH_MODE', '不支持的单元格搜索模式')
     const needle = search.trim().toLocaleLowerCase()
     if (!needle) return []
     if (needle.length > MAX_SEARCH_LENGTH) throw new AppError(400, 'CONFIG_CELL_SEARCH_TOO_LONG', `单元格搜索内容不能超过 ${MAX_SEARCH_LENGTH} 个字符`)
@@ -546,7 +548,8 @@ export class ConfigTableStore {
       row.eachCell({ includeEmpty: false }, (cell) => {
         if (matches.length >= MAX_CELL_MATCHES) return
         const text = configTableCellText(cell)
-        if (text.toLocaleLowerCase().includes(needle)) matches.push({ row: Number(cell.row), column: Number(cell.col), address: cell.address, text })
+        const normalized = text.toLocaleLowerCase()
+        if (mode === 'exact' ? normalized === needle : normalized.includes(needle)) matches.push({ row: Number(cell.row), column: Number(cell.col), address: cell.address, text })
       })
     })
     return matches

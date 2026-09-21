@@ -3,7 +3,7 @@ import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { CodeCardFolder, CodeCardWorkspaceSummary, FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
-import { copyFilePath } from '../lib/clipboard'
+import { copyFilePath, showAppNotice } from '../lib/clipboard'
 import { confirmAction } from '../lib/confirmation'
 import { localBridge } from '../lib/api'
 import { inferDocumentPreviewKind, isScannedDocumentActive } from '../lib/documentTypes'
@@ -482,7 +482,12 @@ export function Sidebar() {
           <Menu>{item(branch.pinned ? '取消置顶' : '置顶分支', async () => {
             try { useAppStore.setState({ configTables: await localBridge.setConfigTableBranchPinned(branch.name, !branch.pinned) }) } catch (error) { window.alert(error instanceof Error ? error.message : '置顶失败') }
           })}{branch.local ? <>{item('SVN 更新当前分支', async () => {
-            try { useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : 'SVN 更新失败') }
+            try {
+              useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) })
+              showAppNotice({ message: `${branch.name} SVN 更新完成`, kind: 'success' })
+            } catch (error) {
+              showAppNotice({ message: error instanceof Error ? `SVN 更新失败：${error.message}` : 'SVN 更新失败', kind: 'error' })
+            }
           })}{item('重新扫描内容', async () => {
             try { useAppStore.setState({ configTables: await localBridge.scanConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : '扫描失败') }
           })}{item('打开分支目录', () => { void localBridge.revealConfigTableBranch(branch.name) })}</> : item('下载分支', async () => {

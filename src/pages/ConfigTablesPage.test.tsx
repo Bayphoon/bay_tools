@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConfigTableFile, ConfigTableRange } from '../../shared/types'
 import { localBridge } from '../lib/api'
-import { WorkbookViewer } from './ConfigTablesPage'
+import { CONFIG_TABLE_LARGE_FILE_THRESHOLD, LargeWorkbookDialog, requiresLargeWorkbookConfirmation, WorkbookViewer } from './ConfigTablesPage'
 
 const file: ConfigTableFile = {
   branch: 'dev',
@@ -29,6 +29,7 @@ beforeEach(() => {
     columnCount,
     values: Array.from({ length: rowCount }, (_, rowOffset) => Array.from({ length: columnCount }, (_, columnOffset) => startRow + rowOffset === 1 && startColumn + columnOffset === 1 ? '完整的单元格内容' : '')),
   }))
+  vi.spyOn(localBridge, 'searchConfigTableCells').mockResolvedValue([{ row: 1, column: 1, address: 'A1', text: '完整的单元格内容' }])
 })
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
@@ -74,5 +75,37 @@ describe('ConfigTablesPage workbook viewer', () => {
     fireEvent.click(screen.getByRole('button', { name: '增大表格字号' }))
     expect(viewer.style.getPropertyValue('--config-table-font-size')).toBe('13px')
     await waitFor(() => expect(window.localStorage.getItem('baytools.config-table.font-size')).toBe('13'))
+  })
+
+  it('supports fuzzy and exact cell search modes', async () => {
+    render(<WorkbookViewer file={file} />)
+    await screen.findByRole('button', { name: '完整的单元格内容' })
+    fireEvent.change(screen.getByLabelText('表内搜索模式'), { target: { value: 'exact' } })
+    fireEvent.change(screen.getByPlaceholderText('搜索当前 Sheet 的单元格内容'), { target: { value: '完整的单元格内容' } })
+    fireEvent.click(screen.getByRole('button', { name: '查找' }))
+    await waitFor(() => expect(localBridge.searchConfigTableCells).toHaveBeenCalledWith('dev', 'sample.xlsx', 'Config', '完整的单元格内容', 'exact'))
+  })
+
+  it('resizes an individual column by dragging its header boundary', async () => {
+    render(<WorkbookViewer file={file} />)
+    const cell = await screen.findByRole('button', { name: '完整的单元格内容' })
+    fireEvent.pointerDown(screen.getByRole('button', { name: '调整 A 列宽' }), { button: 0, clientX: 100 })
+    fireEvent.pointerMove(window, { clientX: 160 })
+    fireEvent.pointerUp(window)
+    expect((cell as HTMLElement).style.width).toBe('208px')
+  })
+})
+
+describe('large config workbook confirmation', () => {
+  it('requires confirmation at the size threshold and offers both open actions', () => {
+    const largeFile = { ...file, size: CONFIG_TABLE_LARGE_FILE_THRESHOLD + 1 }
+    expect(requiresLargeWorkbookConfirmation({ ...file, size: CONFIG_TABLE_LARGE_FILE_THRESHOLD })).toBe(false)
+    expect(requiresLargeWorkbookConfirmation(largeFile)).toBe(true)
+    const onOpen = vi.fn()
+    const onOpenDefault = vi.fn()
+    render(<LargeWorkbookDialog file={largeFile} onCancel={vi.fn()} onOpen={onOpen} onOpenDefault={onOpenDefault} />)
+    expect(screen.getByText('文件较大，确认读取？')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '使用默认工具打开' }))
+    expect(onOpenDefault).toHaveBeenCalledOnce()
   })
 })

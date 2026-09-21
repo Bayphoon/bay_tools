@@ -227,6 +227,7 @@ export interface ServerStatusState {
 }
 
 export type ConfigTableSearchMode = 'tokens' | 'exact'
+export type ConfigTableCellSearchMode = 'contains' | 'exact'
 
 export interface ConfigTableBranch {
   name: string
@@ -565,7 +566,7 @@ export interface LocalBridge {
   getConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
   refreshConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
   getConfigTableRange(branch: string, relativePath: string, sheet: string, startRow: number, rowCount: number, startColumn: number, columnCount: number): Promise<ConfigTableRange>
-  searchConfigTableCells(branch: string, relativePath: string, sheet: string, search: string): Promise<ConfigTableCellMatch[]>
+  searchConfigTableCells(branch: string, relativePath: string, sheet: string, search: string, mode: ConfigTableCellSearchMode): Promise<ConfigTableCellMatch[]>
   revealConfigTableFile(branch: string, relativePath: string): Promise<void>
   revealConfigTableBranch(branch: string): Promise<void>
   openConfigTableFile(branch: string, relativePath: string): Promise<void>

@@ -7,7 +7,7 @@ import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, ConfigTableSearchMode, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, ConfigTableCellSearchMode, ConfigTableSearchMode, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
 import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
@@ -29,7 +29,7 @@ const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
-const apiVersion = 21
+const apiVersion = 22
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -177,8 +177,8 @@ app.get<{ Querystring: { branch: string; path: string; sheet: string; startRow?:
     Number(request.query.columnCount ?? 20),
   )
 })
-app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string } }>('/api/config-tables/cell-search', async (request) => {
-  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '')
+app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string; mode?: ConfigTableCellSearchMode } }>('/api/config-tables/cell-search', async (request) => {
+  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '', request.query.mode ?? 'contains')
 })
 app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/reveal', async (request, reply) => {
   await revealInExplorer(await configTableStore.getFileLocation(request.body.branch, request.body.path), true)
