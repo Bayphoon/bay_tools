@@ -62,10 +62,10 @@ describe('BookmarksPage', () => {
     await screen.findByText('普通链接')
     await user.click(screen.getByRole('button', { name: '新增书签' }))
     expect(screen.getByRole('heading', { name: '新增书签' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '使用Jenkins图标' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '使用GitLab图标' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '使用ChatGPT图标' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '使用哔哩哔哩图标' })).toBeTruthy()
+    for (const name of ['使用Jenkins图标', '使用GitLab图标', '使用DeepSeek图标', '使用ChatGPT图标', '使用Claude Code图标', '使用哔哩哔哩图标']) {
+      expect(screen.getByRole('button', { name }).querySelector('svg')).toBeTruthy()
+    }
+    expect(screen.getByRole('button', { name: '使用GLM图标' }).querySelector('img')).toBeTruthy()
     await user.type(screen.getByLabelText('书签标题'), '在线 JSON')
     await user.type(screen.getByLabelText('书签链接'), 'https://json.example')
     await user.click(screen.getByRole('button', { name: '使用代码图标' }))

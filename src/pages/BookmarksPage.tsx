@@ -1,6 +1,7 @@
 import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import { BookOpen, Bookmark, ClipboardPaste, Cloud, Code2, Copy, Database, FileText, Gamepad2, GitBranch, Globe2, Grid2X2, Link2, List, MessageSquare, PanelsTopLeft, Pencil, Plus, Server, Star, Trash2, Upload, Wrench, type LucideIcon } from 'lucide-react'
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
+import { siBilibili, siClaudecode, siDeepseek, siGitlab, siJenkins, type SimpleIcon } from 'simple-icons'
 import { BOOKMARK_BUILTIN_ICONS, BOOKMARK_ICON_MAX_UPLOAD_SIZE, type BookmarkBuiltinIcon, type BookmarkItem, type BookmarkLayout, type BookmarkLibrary } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { ApiError, bookmarkIconUrl, localBridge } from '../lib/api'
@@ -28,21 +29,37 @@ const iconLabels: Record<BookmarkBuiltinIcon, string> = {
   jenkins: 'Jenkins', gitlab: 'GitLab', deepseek: 'DeepSeek', chatgpt: 'ChatGPT', claude: 'Claude Code', glm: 'GLM', bilibili: '哔哩哔哩',
 }
 
-const brandMarks: Partial<Record<BookmarkBuiltinIcon, { text: string; color: string }>> = {
-  jenkins: { text: 'J', color: '#D24939' },
-  gitlab: { text: 'GL', color: '#FC6D26' },
-  deepseek: { text: 'DS', color: '#4D6BFE' },
-  chatgpt: { text: 'GPT', color: '#10A37F' },
-  claude: { text: 'C', color: '#D97757' },
-  glm: { text: 'GLM', color: '#246BFD' },
-  bilibili: { text: 'B', color: '#00AEEC' },
+type VectorBrandIcon = Pick<SimpleIcon, 'title' | 'hex' | 'path'>
+type BrandIcon = { kind: 'vector'; icon: VectorBrandIcon } | { kind: 'image'; title: string; src: string }
+
+// OpenAI removed its mark from recent Simple Icons releases. Keep the real vector
+// contour from the previously published icon so ChatGPT remains available offline.
+const openAiIcon: VectorBrandIcon = {
+  title: 'OpenAI',
+  hex: '10A37F',
+  path: 'M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z',
+}
+
+// Official chatglm.cn favicon, embedded so the launcher does not depend on the network.
+const glmIconDataUrl = 'data:image/png;base64,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'
+
+const brandIcons: Partial<Record<BookmarkBuiltinIcon, BrandIcon>> = {
+  jenkins: { kind: 'vector', icon: siJenkins },
+  gitlab: { kind: 'vector', icon: siGitlab },
+  deepseek: { kind: 'vector', icon: siDeepseek },
+  chatgpt: { kind: 'vector', icon: openAiIcon },
+  claude: { kind: 'vector', icon: siClaudecode },
+  glm: { kind: 'image', title: 'GLM', src: glmIconDataUrl },
+  bilibili: { kind: 'vector', icon: siBilibili },
 }
 
 function BookmarkBuiltinGlyph({ name, size = 30 }: { name: BookmarkBuiltinIcon; size?: number }) {
   const Icon = iconComponents[name]
   if (Icon) return <Icon size={size} />
-  const brand = brandMarks[name] ?? { text: iconLabels[name].slice(0, 2), color: 'var(--accent)' }
-  return <span className="bookmark-brand-mark" style={{ '--bookmark-brand-color': brand.color, '--bookmark-brand-size': `${size}px` } as CSSProperties}>{brand.text}</span>
+  const brand = brandIcons[name]
+  if (!brand) return <Link2 size={size} />
+  if (brand.kind === 'image') return <img className="bookmark-brand-image" src={brand.src} alt="" title={brand.title} style={{ width: size, height: size }} />
+  return <svg className="bookmark-brand-svg" width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={brand.icon.title}><path fill={`#${brand.icon.hex}`} d={brand.icon.path} /></svg>
 }
 
 function errorMessage(error: unknown): string {
