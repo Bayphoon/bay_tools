@@ -1,12 +1,13 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, FileSpreadsheet, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Table2, Trash2 } from 'lucide-react'
+import { Bookmark, Braces, ChevronDown, ChevronRight, Clock3, CloudUpload, File, FileCode2, FileSpreadsheet, Files, FileImage, FileText, Folder, FolderOpen, Home, Languages, MessageSquareText, MoreHorizontal, Palette, PanelsTopLeft, Plus, Server, Settings, Table2, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { CodeCardFolder, CodeCardWorkspaceSummary, FileWorkbenchPreviewKind, JsonFolder, JsonWorkspaceSummary, ManagedMarkdownDocumentSummary, ManagedMarkdownFolder, ManagedMarkdownLibrary, MarkdownTreeNode } from '../../shared/types'
-import { copyFilePath } from '../lib/clipboard'
+import { copyFilePath, showAppNotice } from '../lib/clipboard'
 import { confirmAction } from '../lib/confirmation'
 import { localBridge } from '../lib/api'
 import { inferDocumentPreviewKind, isScannedDocumentActive } from '../lib/documentTypes'
+import { normalizeSidebarToolOrder } from '../lib/sidebarOrder'
 import { setSidebarGroupCollapsed, sidebarGroupCollapsed } from '../lib/sidebarState'
 import { useAppStore } from '../store/appStore'
 
@@ -242,6 +243,8 @@ export function Sidebar() {
   const markdownActive = location.pathname === '/markdown' || location.pathname.startsWith('/markdown/')
   const codeCardsActive = location.pathname.startsWith('/code-cards/')
   const configTablesActive = location.pathname === '/config-tables' || location.pathname.startsWith('/config-tables/')
+  const toolOrder = normalizeSidebarToolOrder(settings?.sidebar.toolOrder)
+  const toolStyle = (id: (typeof toolOrder)[number]) => ({ order: toolOrder.indexOf(id) + 1 })
 
   useEffect(() => {
     if (savingCollapsedGroups.current || pendingCollapsedGroups.current || !settings) return
@@ -417,8 +420,9 @@ export function Sidebar() {
   return <aside className="sidebar">
     <div className="brand"><img className="brand-icon" src="/baytools-icon.png" alt="" /><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
     <nav className="nav-main">
-      <NavLink to="/" end className="nav-row"><span className="nav-root-icon"><Home size={16} /></span><span>主页</span></NavLink>
-      <div className="nav-group">
+      <NavLink to="/" end className="nav-row nav-home" style={{ order: 0 }}><span className="nav-root-icon"><Home size={16} /></span><span>主页</span></NavLink>
+      <NavLink to="/bookmarks" className="nav-row" style={toolStyle('bookmarks')}><span className="nav-root-icon"><Bookmark size={16} /></span><span>书签</span></NavLink>
+      <div className="nav-group" style={toolStyle('json')}>
         <div className="nav-parent">
           <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><span className="nav-root-icon"><Braces size={16} /></span><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加 JSON 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 JSON', () => { void createWorkspace() })}{item('添加分组', () => { void createJsonFolder() })}</Menu>
@@ -431,7 +435,7 @@ export function Sidebar() {
           })}
         </div>}
       </div>
-      <div className="nav-group">
+      <div className="nav-group" style={toolStyle('markdown')}>
         <div className="nav-parent">
           <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>文档</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="文档操作" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建文件', () => { void createManagedDocument() })}{item('新建分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
@@ -454,7 +458,7 @@ export function Sidebar() {
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : visibleNodes.length ? <MarkdownNodes sourceId={source.id} nodes={visibleNodes} collapsedGroups={collapsedGroups} onToggle={toggleCollapsed} onChanged={refreshMarkdown} onCreate={(relativeDirectory) => createScannedDocument(source.id, relativeDirectory)} /> : <div className="source-empty">当前筛选下没有文件</div>)}
         </div>})}</div>}
       </div>
-      <div className="nav-group">
+      <div className="nav-group" style={toolStyle('code-cards')}>
         <div className="nav-parent">
           <button className={codeCardsActive ? 'active' : undefined} aria-current={codeCardsActive ? 'page' : undefined} aria-expanded={codeCardsOpen} onClick={() => void selectGroup('code-cards')}><span className="nav-root-icon"><PanelsTopLeft size={16} /></span><span>代码段</span>{codeCardsOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加代码段内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建代码段', () => { void createCodeCardWorkspace() })}{item('新建分组', () => { void createCodeCardFolder() })}</Menu>
@@ -467,8 +471,8 @@ export function Sidebar() {
           })}
         </div>}
       </div>
-      <NavLink to="/files" className="nav-row"><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
-      <div className="nav-group">
+      <NavLink to="/files" className="nav-row" style={toolStyle('files')}><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
+      <div className="nav-group" style={toolStyle('config-tables')}>
         <div className="nav-parent">
           <button className={configTablesActive ? 'active' : undefined} aria-current={configTablesActive ? 'page' : undefined} aria-expanded={configTablesOpen} onClick={() => void selectGroup('config-tables')}><span className="nav-root-icon"><Table2 size={16} /></span><span>配置表</span>{configTablesOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="配置表操作" alwaysVisible>{item('刷新本地分支列表', async () => {
@@ -482,7 +486,12 @@ export function Sidebar() {
           <Menu>{item(branch.pinned ? '取消置顶' : '置顶分支', async () => {
             try { useAppStore.setState({ configTables: await localBridge.setConfigTableBranchPinned(branch.name, !branch.pinned) }) } catch (error) { window.alert(error instanceof Error ? error.message : '置顶失败') }
           })}{branch.local ? <>{item('SVN 更新当前分支', async () => {
-            try { useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : 'SVN 更新失败') }
+            try {
+              useAppStore.setState({ configTables: await localBridge.updateConfigTableBranch(branch.name) })
+              showAppNotice({ message: `${branch.name} SVN 更新完成`, kind: 'success' })
+            } catch (error) {
+              showAppNotice({ message: error instanceof Error ? `SVN 更新失败：${error.message}` : 'SVN 更新失败', kind: 'error' })
+            }
           })}{item('重新扫描内容', async () => {
             try { useAppStore.setState({ configTables: await localBridge.scanConfigTableBranch(branch.name) }) } catch (error) { window.alert(error instanceof Error ? error.message : '扫描失败') }
           })}{item('打开分支目录', () => { void localBridge.revealConfigTableBranch(branch.name) })}</> : item('下载分支', async () => {
@@ -490,10 +499,10 @@ export function Sidebar() {
           })}</Menu>
         </div>)}</div>}
       </div>
-      <NavLink to="/timestamp" className="nav-row"><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
-      <NavLink to="/color" className="nav-row"><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>
-      <NavLink to="/translation" className="nav-row"><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>
-      <div className="nav-group">
+      <NavLink to="/timestamp" className="nav-row" style={toolStyle('timestamp')}><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
+      <NavLink to="/color" className="nav-row" style={toolStyle('color')}><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>
+      <NavLink to="/translation" className="nav-row" style={toolStyle('translation')}><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>
+      <div className="nav-group" style={toolStyle('language')}>
         <div className="nav-parent">
           <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><span className="nav-root-icon"><Languages size={16} /></span><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
@@ -512,7 +521,7 @@ export function Sidebar() {
           }, true)}</Menu>
         </div>)}</div>}
       </div>
-      <NavLink to="/server-status" className="nav-row"><span className="nav-root-icon"><Server size={16} /></span><span>服务器状态</span></NavLink>
+      <NavLink to="/server-status" className="nav-row" style={toolStyle('server-status')}><span className="nav-root-icon"><Server size={16} /></span><span>服务器状态</span></NavLink>
     </nav>
     <div className="sidebar-bottom">
       <NavLink to="/data-sync" className="nav-row"><span className="nav-root-icon"><CloudUpload size={16} /></span><span>数据同步</span></NavLink>

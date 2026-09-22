@@ -21,6 +21,7 @@ export const PERSONAL_DATA_PATHS = [
   'markdown/documents',
   'file-workbench',
   'code-cards',
+  'bookmarks',
 ] as const
 
 interface DataDigest {

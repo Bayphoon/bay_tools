@@ -7,8 +7,8 @@ import { readFile, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
 import openBrowser from 'open'
-import type { AppSettings, CodeCardSearchMode, CodeCardWorkspace, ColorState, ConfigTableSearchMode, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
-import { CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
+import type { AppSettings, BookmarkCreateInput, BookmarkLayout, BookmarkUpdateInput, CodeCardSearchMode, CodeCardWorkspace, ColorState, ConfigTableCellSearchMode, ConfigTableSearchMode, FileWorkbenchMetadataPatch, FileWorkbenchTextDocument, JsonScratchpad, JsonWorkspace, ManagedMarkdownDocument, MarkdownDocument, MarkdownUiState, ShortcutLocation } from '../shared/types.js'
+import { BOOKMARK_ICON_MAX_UPLOAD_SIZE, CODE_CARD_IMAGE_MAX_UPLOAD_SIZE, FILE_WORKBENCH_MAX_UPLOAD_SIZE } from '../shared/types.js'
 import { AppError } from './errors.js'
 import { LanguageStore } from './languageStore.js'
 import { ServerStatusStore } from './serverStatusStore.js'
@@ -21,6 +21,7 @@ import { TranslationStore } from './translationStore.js'
 import { registerTranslationRoutes } from './translationRoutes.js'
 import { CodeCardStore } from './codeCardStore.js'
 import { ConfigTableStore } from './configTableStore.js'
+import { BookmarkStore } from './bookmarkStore.js'
 
 const projectRoot = process.cwd()
 const store = new BayToolsStore(projectRoot)
@@ -29,7 +30,8 @@ const serverStatusStore = new ServerStatusStore(projectRoot)
 const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
-const apiVersion = 21
+const bookmarkStore = new BookmarkStore(projectRoot)
+const apiVersion = 26
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -177,8 +179,8 @@ app.get<{ Querystring: { branch: string; path: string; sheet: string; startRow?:
     Number(request.query.columnCount ?? 20),
   )
 })
-app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string } }>('/api/config-tables/cell-search', async (request) => {
-  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '')
+app.get<{ Querystring: { branch: string; path: string; sheet: string; search?: string; mode?: ConfigTableCellSearchMode } }>('/api/config-tables/cell-search', async (request) => {
+  return configTableStore.searchCells(request.query.branch, request.query.path, request.query.sheet, request.query.search ?? '', request.query.mode ?? 'tokens')
 })
 app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/reveal', async (request, reply) => {
   await revealInExplorer(await configTableStore.getFileLocation(request.body.branch, request.body.path), true)
@@ -195,6 +197,29 @@ app.post<{ Body: { branch: string; path: string } }>('/api/config-tables/file/op
 app.get<{ Querystring: { branch: string; path: string } }>('/api/config-tables/file/location', async (request) => ({
   path: await configTableStore.getFileLocation(request.query.branch, request.query.path),
 }))
+
+app.get('/api/bookmarks', async () => bookmarkStore.getLibrary())
+app.post<{ Body: BookmarkCreateInput }>('/api/bookmarks', async (request) => bookmarkStore.create(request.body))
+app.put<{ Params: { id: string }; Body: BookmarkUpdateInput }>('/api/bookmarks/:id', async (request) => bookmarkStore.update(request.params.id, request.body))
+app.patch<{ Body: { layout: BookmarkLayout; revision: number } }>('/api/bookmarks/layout', async (request) => bookmarkStore.updateLayout(request.body.layout, request.body.revision))
+app.delete<{ Params: { id: string }; Body: { revision: number } }>('/api/bookmarks/:id', async (request) => bookmarkStore.delete(request.params.id, request.body.revision))
+app.put<{ Params: { id: string }; Body: Readable; Headers: { 'x-image-type'?: string; 'x-image-size'?: string; 'x-bookmark-revision'?: string } }>('/api/bookmarks/:id/icon', {
+  bodyLimit: BOOKMARK_ICON_MAX_UPLOAD_SIZE + 1024,
+}, async (request) => {
+  let mimeType = ''
+  try { mimeType = request.headers['x-image-type'] ? decodeURIComponent(request.headers['x-image-type']) : '' } catch { throw new AppError(400, 'INVALID_MIME_TYPE', '图标类型编码无效') }
+  return bookmarkStore.uploadIcon(request.params.id, request.body || Readable.from([]), {
+    mimeType,
+    size: Number(request.headers['x-image-size']),
+    revision: Number(request.headers['x-bookmark-revision']),
+  })
+})
+app.get<{ Params: { id: string } }>('/api/bookmarks/:id/icon', async (request, reply) => {
+  const icon = await bookmarkStore.getIcon(request.params.id)
+  reply.header('x-content-type-options', 'nosniff')
+  reply.header('cache-control', 'no-store')
+  return reply.type(icon.mimeType).send(createReadStream(icon.path))
+})
 
 app.get('/api/code-cards', async () => codeCardStore.getLibrary())
 app.get<{ Querystring: { search?: string; page?: string; mode?: CodeCardSearchMode } }>('/api/code-cards/search', async (request) => {
@@ -472,7 +497,7 @@ export async function buildApp(options?: { serveFrontend?: boolean }) {
   await personalDataManager.autoRestoreIfEmpty()
   // 主存储初始化会清理整个 Doc 下遗留的原子写入临时文件，必须先于其他存储执行。
   await store.init()
-  await Promise.all([languageStore.init(), serverStatusStore.init(), codeCardStore.init(), configTableStore.init()])
+  await Promise.all([languageStore.init(), serverStatusStore.init(), codeCardStore.init(), configTableStore.init(), bookmarkStore.init()])
   if (options?.serveFrontend) await registerFrontend()
   return app
 }

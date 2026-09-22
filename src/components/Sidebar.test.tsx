@@ -33,6 +33,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Sidebar nested collapse state', () => {
+  it('applies the saved custom order to root tool tabs while keeping home first', () => {
+    useAppStore.setState({ settings: { ...settings, sidebar: { ...settings.sidebar, toolOrder: ['server-status', 'bookmarks', 'json', 'markdown', 'code-cards', 'files', 'config-tables', 'timestamp', 'color', 'translation', 'language'] } } })
+    render(<MemoryRouter initialEntries={['/']}><Sidebar /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: '主页' }).style.order).toBe('0')
+    expect(screen.getByRole('link', { name: '服务器状态' }).style.order).toBe('1')
+    expect(screen.getByRole('link', { name: '书签' }).style.order).toBe('2')
+    expect(screen.getByRole('button', { name: 'JSON 工具' }).closest('.nav-group')?.getAttribute('style')).toContain('order: 3')
+  })
+
   it('keeps a JSON folder collapsed after its parent tab is closed and reopened', () => {
     render(<MemoryRouter initialEntries={['/json/workspace-1']}><Sidebar /></MemoryRouter>)
     expect(screen.getByText('分组中的 JSON')).toBeTruthy()

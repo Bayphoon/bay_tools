@@ -1,6 +1,10 @@
 import type {
   ApiFailure,
   AppSettings,
+  BookmarkCreateInput,
+  BookmarkLayout,
+  BookmarkLibrary,
+  BookmarkUpdateInput,
   CodeCardFolder,
   CodeCardLibrary,
   CodeCardSearchPage,
@@ -108,6 +112,31 @@ async function uploadCodeCardImage(workspaceId: string, cardId: string, image: B
     throw new ApiError(response.status, failure.code, failure.details, failure.error)
   }
   return response.json() as Promise<CodeCardWorkspace>
+}
+
+function bookmarkIconMimeType(file: File): string {
+  if (file.type) return file.type
+  const extension = file.name.split('.').at(-1)?.toLocaleLowerCase()
+  if (extension === 'ico') return 'image/x-icon'
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg'
+  if (extension === 'png' || extension === 'webp' || extension === 'gif') return `image/${extension}`
+  return ''
+}
+
+async function uploadBookmarkIcon(id: string, file: File, revision: number): Promise<BookmarkLibrary> {
+  const headers = new Headers({
+    'content-type': 'application/octet-stream',
+    'x-baytools-token': await token(),
+    'x-image-type': encodeURIComponent(bookmarkIconMimeType(file)),
+    'x-image-size': String(file.size),
+    'x-bookmark-revision': String(revision),
+  })
+  const response = await fetch(`/api/bookmarks/${encodeURIComponent(id)}/icon`, { method: 'PUT', headers, body: file })
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({ error: response.statusText })) as ApiFailure
+    throw new ApiError(response.status, failure.code, failure.details, failure.error)
+  }
+  return response.json() as Promise<BookmarkLibrary>
 }
 
 const query = (values: Record<string, string>) => new URLSearchParams(values).toString()
@@ -230,7 +259,7 @@ export const localBridge: LocalBridge = {
   getConfigTableWorkbook: (branch, relativePath) => request<ConfigTableWorkbook>(`/api/config-tables/workbook?${query({ branch, path: relativePath })}`),
   refreshConfigTableWorkbook: (branch, relativePath) => request<ConfigTableWorkbook>('/api/config-tables/workbook/refresh', { method: 'POST', body: JSON.stringify({ branch, path: relativePath }) }),
   getConfigTableRange: (branch, relativePath, sheet, startRow, rowCount, startColumn, columnCount) => request<ConfigTableRange>(`/api/config-tables/range?${query({ branch, path: relativePath, sheet, startRow: String(startRow), rowCount: String(rowCount), startColumn: String(startColumn), columnCount: String(columnCount) })}`),
-  searchConfigTableCells: (branch, relativePath, sheet, search) => request<ConfigTableCellMatch[]>(`/api/config-tables/cell-search?${query({ branch, path: relativePath, sheet, search })}`),
+  searchConfigTableCells: (branch, relativePath, sheet, search, mode) => request<ConfigTableCellMatch[]>(`/api/config-tables/cell-search?${query({ branch, path: relativePath, sheet, search, mode })}`),
   revealConfigTableFile: (branch, relativePath) => request<void>('/api/config-tables/file/reveal', { method: 'POST', body: JSON.stringify({ branch, path: relativePath }) }),
   revealConfigTableBranch: (branch) => request<void>('/api/config-tables/branch/reveal', { method: 'POST', body: JSON.stringify({ branch }) }),
   openConfigTableFile: (branch, relativePath) => request<void>('/api/config-tables/file/open', { method: 'POST', body: JSON.stringify({ branch, path: relativePath }) }),
@@ -259,6 +288,12 @@ export const localBridge: LocalBridge = {
   deleteCodeCardFolder: (id) => request<void>(`/api/code-cards/folders/${id}`, { method: 'DELETE' }),
   uploadCodeCardImage,
   deleteCodeCardImage: (workspaceId, cardId, revision) => request<CodeCardWorkspace>(`/api/code-cards/workspaces/${workspaceId}/cards/${cardId}/image`, { method: 'DELETE', body: JSON.stringify({ revision }) }),
+  getBookmarks: () => request<BookmarkLibrary>('/api/bookmarks'),
+  createBookmark: (input: BookmarkCreateInput) => request<BookmarkLibrary>('/api/bookmarks', { method: 'POST', body: JSON.stringify(input) }),
+  updateBookmark: (id, input: BookmarkUpdateInput) => request<BookmarkLibrary>(`/api/bookmarks/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) }),
+  deleteBookmark: (id, revision) => request<BookmarkLibrary>(`/api/bookmarks/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ revision }) }),
+  updateBookmarkLayout: (layout: BookmarkLayout, revision) => request<BookmarkLibrary>('/api/bookmarks/layout', { method: 'PATCH', body: JSON.stringify({ layout, revision }) }),
+  uploadBookmarkIcon,
   listTrash: () => request<TrashItem[]>('/api/trash'),
   restoreTrash: (id, asCopy, targetDirectory) => request<RestoreResult>(`/api/trash/${id}/restore`, { method: 'POST', body: JSON.stringify({ asCopy, targetDirectory }) }),
   deleteTrash: (id) => request<void>(`/api/trash/${id}`, { method: 'DELETE' }),
@@ -271,6 +306,11 @@ export function fileWorkbenchContentUrl(id: string, download = false): string {
 
 export function codeCardImageUrl(workspaceId: string, cardId: string, updatedAt?: string): string {
   const base = `/api/code-cards/workspaces/${encodeURIComponent(workspaceId)}/cards/${encodeURIComponent(cardId)}/image`
+  return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
+}
+
+export function bookmarkIconUrl(id: string, updatedAt?: string): string {
+  const base = `/api/bookmarks/${encodeURIComponent(id)}/icon`
   return updatedAt ? `${base}?v=${encodeURIComponent(updatedAt)}` : base
 }
 

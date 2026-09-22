@@ -1,10 +1,12 @@
-import { ChevronLeft, ChevronRight, ClipboardCopy, Download, ExternalLink, FileSpreadsheet, FolderOpen, RefreshCw, Search, Table2 } from 'lucide-react'
-import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties } from 'react'
+import * as AlertDialog from '@radix-ui/react-alert-dialog'
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCopy, Download, ExternalLink, FileSpreadsheet, FolderOpen, RefreshCw, Search, Table2 } from 'lucide-react'
+import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import type { ConfigTableCellMatch, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
+import type { ConfigTableCellMatch, ConfigTableCellSearchMode, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
 import { EmptyState, PageHeader, Spinner, ToolButton } from '../components/ui'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { copyFilePath, showAppNotice } from '../lib/clipboard'
-import { clampFrozenCount, configTableRangeRequests, configTableRangeValue, MAX_FROZEN_COLUMNS, MAX_FROZEN_ROWS, visibleGridIndexes } from '../lib/configTableViewport'
+import { clampFrozenCount, configTableRangeRequests, configTableRangeValue, gridIndexAtOffset, gridOffsetForIndex, gridTotalSize, MAX_FROZEN_COLUMNS, MAX_FROZEN_ROWS, visibleGridIndexes, type GridSizeOverrides } from '../lib/configTableViewport'
 import { localBridge } from '../lib/api'
 import { useAppStore } from '../store/appStore'
 
@@ -16,6 +18,17 @@ const CONFIG_TABLE_FONT_SIZE_KEY = 'baytools.config-table.font-size'
 const MIN_CONFIG_TABLE_FONT_SIZE = 10
 const MAX_CONFIG_TABLE_FONT_SIZE = 20
 const DEFAULT_CONFIG_TABLE_FONT_SIZE = 12
+const MIN_ROW_HEIGHT = 22
+const MAX_ROW_HEIGHT = 160
+const MIN_COLUMN_WIDTH = 72
+const MAX_COLUMN_WIDTH = 640
+export const CONFIG_TABLE_LARGE_FILE_THRESHOLD = 1024 * 1024
+
+type SheetGridSizes = { rows: GridSizeOverrides; columns: GridSizeOverrides }
+
+export function requiresLargeWorkbookConfirmation(file: ConfigTableFile): boolean {
+  return file.size > CONFIG_TABLE_LARGE_FILE_THRESHOLD
+}
 
 function initialConfigTableFontSize(): number {
   const stored = Number(window.localStorage.getItem(CONFIG_TABLE_FONT_SIZE_KEY))
@@ -45,7 +58,34 @@ function columnLabel(column: number): string {
   return label
 }
 
-function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selectedAddress, frozenRows, frozenColumns, onSelect }: {
+function beginGridResize(event: ReactPointerEvent<HTMLElement>, axis: 'row' | 'column', startSize: number, onResize: (size: number) => void) {
+  if (event.button !== 0) return
+  event.preventDefault()
+  event.stopPropagation()
+  const startPosition = axis === 'column' ? event.clientX : event.clientY
+  const minimum = axis === 'column' ? MIN_COLUMN_WIDTH : MIN_ROW_HEIGHT
+  const maximum = axis === 'column' ? MAX_COLUMN_WIDTH : MAX_ROW_HEIGHT
+  const previousCursor = document.body.style.cursor
+  const previousUserSelect = document.body.style.userSelect
+  document.body.style.cursor = axis === 'column' ? 'col-resize' : 'row-resize'
+  document.body.style.userSelect = 'none'
+  const move = (pointerEvent: PointerEvent) => {
+    const position = axis === 'column' ? pointerEvent.clientX : pointerEvent.clientY
+    onResize(Math.min(maximum, Math.max(minimum, Math.round(startSize + position - startPosition))))
+  }
+  const finish = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', finish)
+    window.removeEventListener('pointercancel', finish)
+    document.body.style.cursor = previousCursor
+    document.body.style.userSelect = previousUserSelect
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', finish)
+  window.addEventListener('pointercancel', finish)
+}
+
+function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selectedAddress, frozenRows, frozenColumns, rowHeights, columnWidths, onResizeRow, onResizeColumn, onSelect }: {
   branch: string
   relativePath: string
   sheet: ConfigTableSheet
@@ -54,6 +94,10 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selecte
   selectedAddress?: string
   frozenRows: number
   frozenColumns: number
+  rowHeights: GridSizeOverrides
+  columnWidths: GridSizeOverrides
+  onResizeRow: (row: number, height: number) => void
+  onResizeColumn: (column: number, width: number) => void
   onSelect: (cell: { address: string; text: string }) => void
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -61,8 +105,10 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selecte
   const [ranges, setRanges] = useState<ConfigTableRange[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string>()
-  const startRow = Math.max(1, Math.floor(Math.max(0, position.top - COLUMN_HEADER_HEIGHT) / ROW_HEIGHT) + 1 - 12)
-  const startColumn = Math.max(1, Math.floor(Math.max(0, position.left - ROW_HEADER_WIDTH) / COLUMN_WIDTH) + 1 - 3)
+  const visibleStartRow = gridIndexAtOffset(Math.max(0, position.top - COLUMN_HEADER_HEIGHT), sheet.rowCount, ROW_HEIGHT, rowHeights)
+  const visibleStartColumn = gridIndexAtOffset(Math.max(0, position.left - ROW_HEADER_WIDTH), sheet.columnCount, COLUMN_WIDTH, columnWidths)
+  const startRow = Math.max(1, visibleStartRow - 12)
+  const startColumn = Math.max(1, visibleStartColumn - 3)
 
   useEffect(() => {
     setRanges([])
@@ -89,32 +135,32 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selecte
   useEffect(() => {
     if (!target || !viewportRef.current) return
     viewportRef.current.scrollTo({
-      top: Math.max(0, (target.row - 1) * ROW_HEIGHT - ROW_HEIGHT * (frozenRows + 3)),
-      left: Math.max(0, (target.column - 1) * COLUMN_WIDTH - COLUMN_WIDTH * (frozenColumns + 2)),
+      top: Math.max(0, gridOffsetForIndex(target.row, ROW_HEIGHT, rowHeights) - ROW_HEIGHT * (frozenRows + 3)),
+      left: Math.max(0, gridOffsetForIndex(target.column, COLUMN_WIDTH, columnWidths) - COLUMN_WIDTH * (frozenColumns + 2)),
       behavior: 'smooth',
     })
     onSelect({ address: target.address, text: target.text })
   }, [target, frozenRows, frozenColumns, onSelect])
 
-  const visibleStartRow = Math.max(1, Math.floor(Math.max(0, position.top - COLUMN_HEADER_HEIGHT) / ROW_HEIGHT) + 1)
-  const visibleStartColumn = Math.max(1, Math.floor(Math.max(0, position.left - ROW_HEADER_WIDTH) / COLUMN_WIDTH) + 1)
-  const visibleRows = visibleGridIndexes(visibleStartRow, 46, frozenRows, sheet.rowCount)
-  const visibleColumns = visibleGridIndexes(visibleStartColumn, 18, frozenColumns, sheet.columnCount)
+  const visibleRows = visibleGridIndexes(startRow, 100, frozenRows, sheet.rowCount)
+  const visibleColumns = visibleGridIndexes(startColumn, 50, frozenColumns, sheet.columnCount)
 
   if (!sheet.rowCount || !sheet.columnCount) return <EmptyState title="工作表为空"><span>该 Sheet 没有可显示的单元格。</span></EmptyState>
 
   return <div className="config-grid-wrap">
     {error && <div className="config-grid-error">{error}</div>}
     <div ref={viewportRef} className="config-grid-viewport" onScroll={(event) => setPosition({ top: event.currentTarget.scrollTop, left: event.currentTarget.scrollLeft })}>
-      <div className="config-grid-canvas" style={{ width: ROW_HEADER_WIDTH + sheet.columnCount * COLUMN_WIDTH, height: COLUMN_HEADER_HEIGHT + sheet.rowCount * ROW_HEIGHT }}>
+      <div className="config-grid-canvas" style={{ width: ROW_HEADER_WIDTH + gridTotalSize(sheet.columnCount, COLUMN_WIDTH, columnWidths), height: COLUMN_HEADER_HEIGHT + gridTotalSize(sheet.rowCount, ROW_HEIGHT, rowHeights) }}>
         <div className="config-grid-corner" style={{ top: position.top, left: position.left }} />
         {visibleColumns.map((column) => {
           const frozen = column <= frozenColumns
-          return <div key={`header-${column}`} className={`config-grid-column-header ${frozen ? 'frozen-column' : ''} ${column === frozenColumns ? 'freeze-column-edge' : ''}`} style={{ top: position.top, left: (frozen ? position.left : 0) + ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }}>{columnLabel(column)}</div>
+          const width = columnWidths[column] ?? COLUMN_WIDTH
+          return <div key={`header-${column}`} className={`config-grid-column-header ${frozen ? 'frozen-column' : ''} ${column === frozenColumns ? 'freeze-column-edge' : ''}`} style={{ top: position.top, left: (frozen ? position.left : 0) + ROW_HEADER_WIDTH + gridOffsetForIndex(column, COLUMN_WIDTH, columnWidths), width }}><span>{columnLabel(column)}</span><button aria-label={`调整 ${columnLabel(column)} 列宽`} className="config-grid-column-resizer" onPointerDown={(event) => beginGridResize(event, 'column', width, (size) => onResizeColumn(column, size))} /></div>
         })}
         {visibleRows.map((row) => {
           const frozen = row <= frozenRows
-          return <div key={`row-${row}`} className={`config-grid-row-header ${frozen ? 'frozen-row' : ''} ${row === frozenRows ? 'freeze-row-edge' : ''}`} style={{ top: (frozen ? position.top : 0) + COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: position.left }}>{row}</div>
+          const height = rowHeights[row] ?? ROW_HEIGHT
+          return <div key={`row-${row}`} className={`config-grid-row-header ${frozen ? 'frozen-row' : ''} ${row === frozenRows ? 'freeze-row-edge' : ''}`} style={{ top: (frozen ? position.top : 0) + COLUMN_HEADER_HEIGHT + gridOffsetForIndex(row, ROW_HEIGHT, rowHeights), left: position.left, height }}><span>{row}</span><button aria-label={`调整第 ${row} 行高度`} className="config-grid-row-resizer" onPointerDown={(event) => beginGridResize(event, 'row', height, (size) => onResizeRow(row, size))} /></div>
         })}
         {visibleRows.flatMap((row) => visibleColumns.map((column) => {
           const text = configTableRangeValue(ranges, row, column)
@@ -123,8 +169,10 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selecte
           const frozenColumn = column <= frozenColumns
           const searchMatch = target?.row === row && target.column === column
           const selected = selectedAddress === address
+          const height = rowHeights[row] ?? ROW_HEIGHT
+          const width = columnWidths[column] ?? COLUMN_WIDTH
           const className = ['config-grid-cell', frozenRow ? 'frozen-row' : '', frozenColumn ? 'frozen-column' : '', row === frozenRows ? 'freeze-row-edge' : '', column === frozenColumns ? 'freeze-column-edge' : '', searchMatch ? 'search-match' : '', selected ? 'selected' : ''].filter(Boolean).join(' ')
-          return <button key={`${row}-${column}`} className={className} style={{ top: (frozenRow ? position.top : 0) + COLUMN_HEADER_HEIGHT + (row - 1) * ROW_HEIGHT, left: (frozenColumn ? position.left : 0) + ROW_HEADER_WIDTH + (column - 1) * COLUMN_WIDTH }} title={text} onClick={() => onSelect({ address, text })}>{text}</button>
+          return <button key={`${row}-${column}`} className={className} style={{ top: (frozenRow ? position.top : 0) + COLUMN_HEADER_HEIGHT + gridOffsetForIndex(row, ROW_HEIGHT, rowHeights), left: (frozenColumn ? position.left : 0) + ROW_HEADER_WIDTH + gridOffsetForIndex(column, COLUMN_WIDTH, columnWidths), width, height }} title={text} onClick={() => onSelect({ address, text })}>{text}</button>
         }))}
       </div>
     </div>
@@ -139,10 +187,12 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [cellSearch, setCellSearch] = useState('')
+  const [cellSearchMode, setCellSearchMode] = useState<ConfigTableCellSearchMode>('tokens')
   const [matches, setMatches] = useState<ConfigTableCellMatch[]>([])
   const [matchIndex, setMatchIndex] = useState(-1)
   const [selectedCell, setSelectedCell] = useState<{ address: string; text: string }>()
   const [frozenBySheet, setFrozenBySheet] = useState<Record<string, { rows: number; columns: number }>>({})
+  const [gridSizesBySheet, setGridSizesBySheet] = useState<Record<string, SheetGridSizes>>({})
   const [fontSize, setFontSize] = useState(initialConfigTableFontSize)
 
   useEffect(() => {
@@ -174,6 +224,7 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
     setMatchIndex(-1)
     setSelectedCell(undefined)
     setFrozenBySheet({})
+    setGridSizesBySheet({})
     void load()
     // The file identity is the intended reload boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,11 +232,18 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
 
   const activeSheet = workbook?.sheets.find((sheet) => sheet.name === sheetName)
   const frozen = frozenBySheet[sheetName] ?? { rows: 0, columns: 0 }
+  const gridSizes = gridSizesBySheet[sheetName] ?? { rows: {}, columns: {} }
   const updateFrozen = (field: 'rows' | 'columns', value: number) => {
     if (!activeSheet) return
     const maximum = field === 'rows' ? MAX_FROZEN_ROWS : MAX_FROZEN_COLUMNS
     const total = field === 'rows' ? activeSheet.rowCount : activeSheet.columnCount
     setFrozenBySheet((current) => ({ ...current, [sheetName]: { ...frozen, [field]: clampFrozenCount(value, total, maximum) } }))
+  }
+  const updateGridSize = (field: keyof SheetGridSizes, index: number, size: number) => {
+    setGridSizesBySheet((current) => {
+      const sheetSizes = current[sheetName] ?? { rows: {}, columns: {} }
+      return { ...current, [sheetName]: { ...sheetSizes, [field]: { ...sheetSizes[field], [index]: size } } }
+    })
   }
   const copySelectedCell = useCallback(async () => {
     if (!selectedCell) return
@@ -212,13 +270,18 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   const runCellSearch = async () => {
     if (!workbook || !sheetName || !cellSearch.trim()) { setMatches([]); setMatchIndex(-1); return }
     try {
-      const next = await localBridge.searchConfigTableCells(file.branch, file.relativePath, sheetName, cellSearch)
+      const next = await localBridge.searchConfigTableCells(file.branch, file.relativePath, sheetName, cellSearch, cellSearchMode)
       setMatches(next)
       setMatchIndex(next.length ? 0 : -1)
       showAppNotice({ message: next.length ? `找到 ${next.length} 个结果` : '当前 Sheet 未找到结果', kind: 'success' })
     } catch (nextError) {
       showAppNotice({ message: errorMessage(nextError), kind: 'error' })
     }
+  }
+  const clearCellSearch = () => {
+    setCellSearch('')
+    setMatches([])
+    setMatchIndex(-1)
   }
 
   if (loading && !workbook) return <div className="config-viewer-loading"><Spinner label="正在读取配置表" /></div>
@@ -235,7 +298,7 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       </div>
     </header>
     <div className="config-workbook-toolbar">
-      <div className="config-cell-search"><Search size={14} /><input value={cellSearch} onChange={(event) => setCellSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runCellSearch() }} placeholder="搜索当前 Sheet 的单元格内容" /><button onClick={() => void runCellSearch()}>查找</button></div>
+      <div className="config-cell-search"><Search size={14} /><select aria-label="表内搜索模式" value={cellSearchMode} onChange={(event) => { setCellSearchMode(event.target.value as ConfigTableCellSearchMode); setMatches([]); setMatchIndex(-1) }}><option value="tokens">词元匹配</option><option value="exact">全文匹配</option></select><input value={cellSearch} onChange={(event) => setCellSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void runCellSearch(); else clearSearchOnEscape(event, cellSearch, clearCellSearch) }} placeholder="搜索单元格内容，空格分隔词元" /><SearchClearButton value={cellSearch} onClear={clearCellSearch} label="清空表内搜索" className="config-cell-search-clear" /><button onClick={() => void runCellSearch()}>查找</button></div>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value <= 0 ? matches.length - 1 : value - 1)}><ChevronLeft size={14} /></button>
       <span>{matches.length ? `${matchIndex + 1}/${matches.length}` : '0/0'}</span>
       <button disabled={!matches.length} onClick={() => setMatchIndex((value) => value >= matches.length - 1 ? 0 : value + 1)}><ChevronRight size={14} /></button>
@@ -258,9 +321,31 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
       {workbook.sheets.map((sheet) => <button key={sheet.name} className={sheet.name === sheetName ? 'active' : ''} onClick={() => { setSheetName(sheet.name); setMatches([]); setMatchIndex(-1); setSelectedCell(undefined) }}>{sheet.name}<span>{sheet.rowCount} × {sheet.columnCount}</span></button>)}
     </div>
     <div className="config-sheet-area">
-      {activeSheet ? <VirtualSheet branch={file.branch} relativePath={file.relativePath} sheet={activeSheet} refreshKey={refreshKey} target={matches[matchIndex]} selectedAddress={selectedCell?.address} frozenRows={frozen.rows} frozenColumns={frozen.columns} onSelect={setSelectedCell} /> : <EmptyState title="没有可用的工作表" />}
+      {activeSheet ? <VirtualSheet branch={file.branch} relativePath={file.relativePath} sheet={activeSheet} refreshKey={refreshKey} target={matches[matchIndex]} selectedAddress={selectedCell?.address} frozenRows={frozen.rows} frozenColumns={frozen.columns} rowHeights={gridSizes.rows} columnWidths={gridSizes.columns} onResizeRow={(row, height) => updateGridSize('rows', row, height)} onResizeColumn={(column, width) => updateGridSize('columns', column, width)} onSelect={setSelectedCell} /> : <EmptyState title="没有可用的工作表" />}
     </div>
   </section>
+}
+
+export function LargeWorkbookDialog({ file, onCancel, onOpen, onOpenDefault }: {
+  file?: ConfigTableFile
+  onCancel: () => void
+  onOpen: () => void
+  onOpenDefault: () => void
+}) {
+  return <AlertDialog.Root open={Boolean(file)} onOpenChange={(open) => { if (!open) onCancel() }}>
+    <AlertDialog.Portal>
+      <AlertDialog.Overlay className="config-large-file-overlay" />
+      <AlertDialog.Content className="config-large-file-dialog">
+        <div className="config-large-file-icon"><AlertTriangle size={22} /></div>
+        <div><AlertDialog.Title>文件较大，确认读取？</AlertDialog.Title><AlertDialog.Description><strong>{file?.name}</strong> 的大小为 {file ? formatSize(file.size) : ''}。在 BayTools 中解析可能需要较长时间，并在读取期间占用较多内存。</AlertDialog.Description></div>
+        <div className="config-large-file-actions">
+          <AlertDialog.Cancel asChild><button>取消</button></AlertDialog.Cancel>
+          <button onClick={onOpenDefault}><ExternalLink size={14} />使用默认工具打开</button>
+          <AlertDialog.Action asChild><button className="primary" onClick={onOpen}>坚持打开</button></AlertDialog.Action>
+        </div>
+      </AlertDialog.Content>
+    </AlertDialog.Portal>
+  </AlertDialog.Root>
 }
 
 export function ConfigTablesPage() {
@@ -275,6 +360,7 @@ export function ConfigTablesPage() {
   const [page, setPage] = useState(1)
   const [files, setFiles] = useState<ConfigTableFilePage>()
   const [selected, setSelected] = useState<ConfigTableFile>()
+  const [largeFile, setLargeFile] = useState<ConfigTableFile>()
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState<string>()
@@ -305,6 +391,7 @@ export function ConfigTablesPage() {
     setPage(1)
     setFiles(undefined)
     setSelected(undefined)
+    setLargeFile(undefined)
     setIncludeDev(false)
   }, [branch])
 
@@ -315,7 +402,9 @@ export function ConfigTablesPage() {
     void localBridge.searchConfigTableFiles(branch, includeDev, deferredSearch, mode, page).then((next) => {
       if (cancelled) return
       setFiles(next)
-      setSelected((current) => current && next.items.some((item) => item.branch === current.branch && item.relativePath === current.relativePath) ? current : next.items[0])
+      setSelected((current) => current && next.items.some((item) => item.branch === current.branch && item.relativePath === current.relativePath)
+        ? current
+        : next.items.find((item) => !requiresLargeWorkbookConfirmation(item)))
       setError(undefined)
     }).catch((nextError) => {
       if (!cancelled) setError(errorMessage(nextError))
@@ -370,11 +459,11 @@ export function ConfigTablesPage() {
             <option value="current-dev" disabled={!hasLocalDev || branch === 'dev'}>当前分支 + dev</option>
           </select>
           <select value={mode} onChange={(event) => { setMode(event.target.value as ConfigTableSearchMode); setPage(1) }}><option value="tokens">词元匹配</option><option value="exact">完整文件名匹配</option></select>
-          <label><Search size={14} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="按文件名搜索，空格分隔词元" /></label>
+          <label><Search size={14} /><input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} onKeyDown={(event) => clearSearchOnEscape(event, search, () => { setSearch(''); setPage(1) })} placeholder="按文件名搜索，空格分隔词元" /><SearchClearButton value={search} onClear={() => { setSearch(''); setPage(1) }} label="清空配置表文件搜索" /></label>
         </div>
         <div className="config-file-summary"><span>{files?.total ?? 0} 个文件</span>{loadingFiles && <span>读取中…</span>}</div>
         <div className="config-file-list">
-          {files?.items.map((file) => <div key={`${file.branch}:${file.relativePath}`} className={`config-file-row ${selected?.branch === file.branch && selected.relativePath === file.relativePath ? 'active' : ''}`} onClick={() => setSelected(file)}>
+          {files?.items.map((file) => <div key={`${file.branch}:${file.relativePath}`} className={`config-file-row ${selected?.branch === file.branch && selected.relativePath === file.relativePath ? 'active' : ''}`} onClick={() => { if (requiresLargeWorkbookConfirmation(file)) setLargeFile(file); else setSelected(file) }}>
             <FileSpreadsheet size={17} />
             <div><strong>{file.name}</strong><span>{file.branch} · {file.relativePath}</span><small>{formatSize(file.size)} · {new Date(file.updatedAt).toLocaleString()}</small></div>
             <button title="打开文件所在位置" onClick={(event) => { event.stopPropagation(); void localBridge.revealConfigTableFile(file.branch, file.relativePath) }}><FolderOpen size={13} /></button>
@@ -386,5 +475,11 @@ export function ConfigTablesPage() {
       </aside>
       <div className="config-viewer-panel">{selected ? <WorkbookViewer key={`${selected.branch}:${selected.relativePath}`} file={selected} /> : <EmptyState title="选择一个配置表"><span>在左侧选择 XLSX 或 XLSM 文件后查看内容。</span></EmptyState>}</div>
     </div>
+    <LargeWorkbookDialog file={largeFile} onCancel={() => setLargeFile(undefined)} onOpen={() => { if (largeFile) setSelected(largeFile); setLargeFile(undefined) }} onOpenDefault={() => {
+      const file = largeFile
+      setLargeFile(undefined)
+      if (!file) return
+      void localBridge.openConfigTableFile(file.branch, file.relativePath).then(() => showAppNotice({ message: `已使用默认工具打开 ${file.name}`, kind: 'success' })).catch((openError) => showAppNotice({ message: errorMessage(openError), kind: 'error' }))
+    }} />
   </main>
 }

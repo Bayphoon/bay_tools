@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ClockPanel } from '../components/ClockPanel'
 import { JsonTree } from '../components/JsonTree'
 import { JsonTextEditor } from '../components/JsonTextEditor'
+import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
 import { CopyButton, InlineError, ToolButton } from '../components/ui'
 import { useAutoFormatJson } from '../hooks/useAutoFormatJson'
 import { useTranslation } from '../hooks/useTranslation'
@@ -58,7 +59,7 @@ function JsonMini() {
   useAutoFormatJson(text, autoFormat && mode === 'text', setText)
   return <section className="dashboard-card json-mini-card">
     <div className="json-mini-toolbar"><div className="toolbar"><ToolButton onClick={() => updateScratchpad({ mode: mode === 'text' ? 'tree' : 'text' })}>{mode === 'text' ? '树形查看' : '原文编辑'}</ToolButton><ToolButton onClick={format}>格式化</ToolButton><label className="json-auto-format"><input type="checkbox" checked={autoFormat} onChange={(event) => updateScratchpad({ autoFormat: event.target.checked })} />自动格式化</label>{'value' in parsed && <span className="valid-state"><CheckCircle2 size={14} />有效</span>}</div><span className={`json-mini-note ${saveStatus}`} title="保存在 Doc/json/home-scratchpad.json">{saveLabel}</span></div>
-    {mode === 'text' ? <div className="scratch-monaco"><JsonTextEditor value={text} onChange={setText} /></div> : <div className="tree-panel"><label className="search-field"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索键或值" /></label><JsonTree text={text} search={search} /></div>}
+    {mode === 'text' ? <div className="scratch-monaco"><JsonTextEditor value={text} onChange={setText} /></div> : <div className="tree-panel"><label className="search-field"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => clearSearchOnEscape(event, search, () => setSearch(''))} placeholder="搜索键或值" /><SearchClearButton value={search} onClear={() => setSearch('')} label="清空主页 JSON 搜索" /></label><JsonTree text={text} search={search} /></div>}
     {'error' in parsed && <InlineError>{parsed.error}</InlineError>}
   </section>
 }

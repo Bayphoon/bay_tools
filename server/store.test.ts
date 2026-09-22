@@ -21,6 +21,7 @@ describe('BayToolsStore', () => {
 
   it('initializes durable files and detects revision conflicts', async () => {
     const settings = await store.getSettings()
+    expect(settings.sidebar.toolOrder).toContain('bookmarks')
     await store.updateSettings(settings)
     await expect(store.updateSettings(settings)).rejects.toBeInstanceOf(ConflictError)
     expect(JSON.parse(await readFile(join(root, 'Doc', 'settings.json'), 'utf8')).schemaVersion).toBe(1)

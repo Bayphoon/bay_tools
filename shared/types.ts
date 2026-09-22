@@ -1,5 +1,8 @@
 export type ThemeMode = 'light' | 'dark' | 'manual' | 'solar'
 
+export const SIDEBAR_TOOL_IDS = ['bookmarks', 'json', 'markdown', 'code-cards', 'files', 'config-tables', 'timestamp', 'color', 'translation', 'language', 'server-status'] as const
+export type SidebarToolId = typeof SIDEBAR_TOOL_IDS[number]
+
 export interface AppSettings {
   schemaVersion: 1
   updatedAt: string
@@ -16,6 +19,7 @@ export interface AppSettings {
   sidebar: {
     collapsedGroups: string[]
     width: number
+    toolOrder?: SidebarToolId[]
   }
   workSchedule: {
     workDays: number[]
@@ -227,6 +231,7 @@ export interface ServerStatusState {
 }
 
 export type ConfigTableSearchMode = 'tokens' | 'exact'
+export type ConfigTableCellSearchMode = 'tokens' | 'exact'
 
 export interface ConfigTableBranch {
   name: string
@@ -412,6 +417,56 @@ export interface CodeCardSearchPage {
 
 export const CODE_CARD_IMAGE_MAX_UPLOAD_SIZE = 4 * 1024 * 1024
 
+export const BOOKMARK_BUILTIN_ICONS = ['link', 'globe', 'code', 'book', 'github', 'server', 'database', 'cloud', 'game', 'tool', 'file', 'message', 'star', 'jenkins', 'gitlab', 'deepseek', 'chatgpt', 'claude', 'glm', 'bilibili'] as const
+export type BookmarkBuiltinIcon = typeof BOOKMARK_BUILTIN_ICONS[number]
+export type BookmarkLayout = 'list' | 'grid' | 'large'
+
+export type BookmarkIcon = {
+  kind: 'builtin'
+  name: BookmarkBuiltinIcon
+} | {
+  kind: 'local'
+  fileName: string
+  mimeType: string
+  size: number
+  updatedAt: string
+}
+
+export interface BookmarkItem {
+  id: string
+  title: string
+  url: string
+  favorite: boolean
+  icon: BookmarkIcon
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BookmarkLibrary {
+  schemaVersion: 1
+  revision: number
+  updatedAt: string
+  layout: BookmarkLayout
+  items: BookmarkItem[]
+}
+
+export interface BookmarkCreateInput {
+  title: string
+  url: string
+  builtinIcon: BookmarkBuiltinIcon
+  revision: number
+}
+
+export interface BookmarkUpdateInput {
+  title: string
+  url: string
+  favorite: boolean
+  builtinIcon?: BookmarkBuiltinIcon
+  revision: number
+}
+
+export const BOOKMARK_ICON_MAX_UPLOAD_SIZE = 2 * 1024 * 1024
+
 export type TrashKind = 'markdown' | 'scanned-document' | 'managed-markdown' | 'json-workspace' | 'file-workbench' | 'code-card'
 
 export interface TrashItem {
@@ -565,7 +620,7 @@ export interface LocalBridge {
   getConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
   refreshConfigTableWorkbook(branch: string, relativePath: string): Promise<ConfigTableWorkbook>
   getConfigTableRange(branch: string, relativePath: string, sheet: string, startRow: number, rowCount: number, startColumn: number, columnCount: number): Promise<ConfigTableRange>
-  searchConfigTableCells(branch: string, relativePath: string, sheet: string, search: string): Promise<ConfigTableCellMatch[]>
+  searchConfigTableCells(branch: string, relativePath: string, sheet: string, search: string, mode: ConfigTableCellSearchMode): Promise<ConfigTableCellMatch[]>
   revealConfigTableFile(branch: string, relativePath: string): Promise<void>
   revealConfigTableBranch(branch: string): Promise<void>
   openConfigTableFile(branch: string, relativePath: string): Promise<void>
@@ -591,6 +646,12 @@ export interface LocalBridge {
   deleteCodeCardFolder(id: string): Promise<void>
   uploadCodeCardImage(workspaceId: string, cardId: string, image: Blob, width: number, height: number, revision: number): Promise<CodeCardWorkspace>
   deleteCodeCardImage(workspaceId: string, cardId: string, revision: number): Promise<CodeCardWorkspace>
+  getBookmarks(): Promise<BookmarkLibrary>
+  createBookmark(input: BookmarkCreateInput): Promise<BookmarkLibrary>
+  updateBookmark(id: string, input: BookmarkUpdateInput): Promise<BookmarkLibrary>
+  deleteBookmark(id: string, revision: number): Promise<BookmarkLibrary>
+  updateBookmarkLayout(layout: BookmarkLayout, revision: number): Promise<BookmarkLibrary>
+  uploadBookmarkIcon(id: string, file: File, revision: number): Promise<BookmarkLibrary>
   listTrash(): Promise<TrashItem[]>
   restoreTrash(id: string, asCopy?: boolean, targetDirectory?: string): Promise<RestoreResult>
   deleteTrash(id: string): Promise<void>

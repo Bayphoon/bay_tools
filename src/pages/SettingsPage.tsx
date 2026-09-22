@@ -1,16 +1,20 @@
 import * as Tabs from '@radix-ui/react-tabs'
-import { LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { DeepSeekSettings } from '../components/DeepSeekSettings'
-import type { AppSettings, ShortcutLocation, ThemeMode, TrashItem } from '../../shared/types'
+import { SIDEBAR_TOOL_IDS, type AppSettings, type ShortcutLocation, type SidebarToolId, type ThemeMode, type TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
 import { confirmAction } from '../lib/confirmation'
 import { applyTheme } from '../hooks/useTheme'
 import { useAppStore } from '../store/appStore'
+import { moveSidebarTool, normalizeSidebarToolOrder } from '../lib/sidebarOrder'
 
 const formatSize = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KiB` : `${(bytes / 1024 / 1024).toFixed(1)} MiB`
+const sidebarToolLabels: Record<SidebarToolId, string> = {
+  bookmarks: '书签', json: 'JSON 工具', markdown: '文档', 'code-cards': '代码段', files: '文件工作台', 'config-tables': '配置表', timestamp: 'Timestamp', color: '颜色格式转换', translation: '翻译', language: '多语言查询', 'server-status': '服务器状态',
+}
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -39,6 +43,7 @@ export function SettingsPage() {
   }, [draft, settings])
 
   const updateTheme = (patch: Partial<AppSettings['theme']>) => setDraft((value) => ({ ...value, theme: { ...value.theme, ...patch } }))
+  const updateToolOrder = (toolOrder: SidebarToolId[]) => setDraft((value) => ({ ...value, sidebar: { ...value.sidebar, toolOrder } }))
   const save = async () => {
     try { await saveSettings(draft); setSaved(true); window.setTimeout(() => setSaved(false), 1500) }
     catch (value) { setError(value instanceof Error ? value.message : '设置保存失败') }
@@ -97,8 +102,8 @@ export function SettingsPage() {
   }
   return <div className="page">
     <PageHeader title="设置" description="调整 BayTools 外观、启动方式并管理本地垃圾箱" />
-    <Tabs.Root value={['appearance', 'shortcut', 'deepseek', 'trash'].includes(selectedTab) ? selectedTab : 'appearance'} onValueChange={(tab) => setSearchParams({ tab }, { replace: true })} className="settings-tabs">
-      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="deepseek">DeepSeek API</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
+    <Tabs.Root value={['appearance', 'sidebar', 'shortcut', 'deepseek', 'trash'].includes(selectedTab) ? selectedTab : 'appearance'} onValueChange={(tab) => setSearchParams({ tab }, { replace: true })} className="settings-tabs">
+      <Tabs.List className="settings-tab-list"><Tabs.Trigger value="appearance">外观</Tabs.Trigger><Tabs.Trigger value="sidebar">侧边栏</Tabs.Trigger><Tabs.Trigger value="shortcut">快捷方式</Tabs.Trigger><Tabs.Trigger value="deepseek">DeepSeek API</Tabs.Trigger><Tabs.Trigger value="trash">垃圾箱 <span>{trash.length}</span></Tabs.Trigger></Tabs.List>
       <Tabs.Content value="deepseek" className="settings-content"><DeepSeekSettings /></Tabs.Content>
       <Tabs.Content value="appearance" className="settings-content">
         <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">THEME MODE</span><h2>外观模式</h2></div></div>
@@ -112,6 +117,12 @@ export function SettingsPage() {
         </section>
         <section className="settings-section solar-info"><Sunrise size={22} /><div><strong>日出日落过渡</strong><p>06:00～06:30 从暗色过渡到亮色；19:00～19:30 从亮色过渡到暗色。其他时段保持对应主题。</p></div></section>
         <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存外观设置'}</ToolButton></div>
+      </Tabs.Content>
+      <Tabs.Content value="sidebar" className="settings-content">
+        <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">TOOL ORDER</span><h2>功能页签顺序</h2><p>主页固定在顶部；数据同步和设置固定在底部。其余工具可以按使用习惯排列。</p></div><ToolButton onClick={() => updateToolOrder([...SIDEBAR_TOOL_IDS])}><RotateCcw size={14} />恢复默认</ToolButton></div>
+          <div className="sidebar-order-list">{normalizeSidebarToolOrder(draft.sidebar.toolOrder).map((id, index, order) => <div className="sidebar-order-item" key={id}><span>{index + 1}</span><strong>{sidebarToolLabels[id]}</strong><div><button type="button" aria-label={`上移 ${sidebarToolLabels[id]}`} disabled={index === 0} onClick={() => updateToolOrder(moveSidebarTool(order, id, -1))}><ArrowUp size={15} /></button><button type="button" aria-label={`下移 ${sidebarToolLabels[id]}`} disabled={index === order.length - 1} onClick={() => updateToolOrder(moveSidebarTool(order, id, 1))}><ArrowDown size={15} /></button></div></div>)}</div>
+        </section>
+        <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存侧边栏顺序'}</ToolButton></div>
       </Tabs.Content>
       <Tabs.Content value="shortcut" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">WINDOWS SHORTCUT</span><h2>启动快捷方式</h2><p>快捷方式使用 BayTools 图标，并通过无终端窗口的启动方式打开。</p></div></div>
