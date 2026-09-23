@@ -450,7 +450,7 @@ export function Sidebar() {
             if (note === null) return
             await localBridge.updateMarkdownSourceNote(source.id, note)
             await refreshMarkdown()
-          })}{item('刷新扫描', refreshMarkdown)}{item('打开文件所在位置', () => { void localBridge.revealMarkdownSource(source.id) })}{item('移除扫描目录', async () => {
+          })}{item('刷新扫描', refreshMarkdown)}{item('打开文件所在位置', () => { void localBridge.revealMarkdownSource(source.id) })}{item('复制目录路径', () => { void copyFilePath(async () => source.path, '目录路径') })}{item('移除扫描目录', async () => {
             if (!(await confirmAction(`移除扫描目录 ${displayName}？原文件不会删除。`))) return
             await localBridge.removeMarkdownSource(source.id)
             await refreshMarkdown()

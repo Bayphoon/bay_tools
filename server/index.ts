@@ -31,7 +31,7 @@ const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
 const bookmarkStore = new BookmarkStore(projectRoot)
-const apiVersion = 26
+const apiVersion = 27
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -144,6 +144,7 @@ app.post<{ Body: { url: string } }>('/api/server-status/sync', async (request) =
 
 app.get('/api/config-tables', async () => configTableStore.getState())
 app.put<{ Body: { path: string } }>('/api/config-tables/root', async (request) => configTableStore.setRootPath(request.body?.path ?? ''))
+app.patch<{ Body: { rows: number; columns: number; revision: number } }>('/api/config-tables/freeze-defaults', async (request) => configTableStore.setFreezeDefaults(request.body?.rows, request.body?.columns, request.body?.revision))
 app.post('/api/config-tables/refresh-local', async () => configTableStore.refreshLocalBranches())
 app.post('/api/config-tables/sync-remote', async () => configTableStore.syncRemoteBranches())
 app.patch<{ Params: { branch: string }; Body: { pinned: boolean } }>('/api/config-tables/branches/:branch/pin', async (request) => {

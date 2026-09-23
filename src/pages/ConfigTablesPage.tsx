@@ -2,6 +2,7 @@ import * as AlertDialog from '@radix-ui/react-alert-dialog'
 import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCopy, Download, ExternalLink, FileSpreadsheet, FolderOpen, RefreshCw, Search, Table2 } from 'lucide-react'
 import { useCallback, useDeferredValue, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS, DEFAULT_CONFIG_TABLE_FROZEN_ROWS } from '../../shared/types'
 import type { ConfigTableCellMatch, ConfigTableCellSearchMode, ConfigTableFile, ConfigTableFilePage, ConfigTableRange, ConfigTableSearchMode, ConfigTableSheet, ConfigTableWorkbook } from '../../shared/types'
 import { EmptyState, PageHeader, Spinner, ToolButton } from '../components/ui'
 import { clearSearchOnEscape, SearchClearButton } from '../components/SearchClearButton'
@@ -181,6 +182,7 @@ function VirtualSheet({ branch, relativePath, sheet, refreshKey, target, selecte
 }
 
 export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
+  const configTables = useAppStore((state) => state.configTables)
   const [workbook, setWorkbook] = useState<ConfigTableWorkbook>()
   const [sheetName, setSheetName] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
@@ -231,7 +233,10 @@ export function WorkbookViewer({ file }: { file: ConfigTableFile }) {
   }, [file.branch, file.relativePath])
 
   const activeSheet = workbook?.sheets.find((sheet) => sheet.name === sheetName)
-  const frozen = frozenBySheet[sheetName] ?? { rows: 0, columns: 0 }
+  const frozen = {
+    rows: clampFrozenCount(frozenBySheet[sheetName]?.rows ?? configTables?.defaultFrozenRows ?? DEFAULT_CONFIG_TABLE_FROZEN_ROWS, activeSheet?.rowCount ?? 0, MAX_FROZEN_ROWS),
+    columns: clampFrozenCount(frozenBySheet[sheetName]?.columns ?? configTables?.defaultFrozenColumns ?? DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS, activeSheet?.columnCount ?? 0, MAX_FROZEN_COLUMNS),
+  }
   const gridSizes = gridSizesBySheet[sheetName] ?? { rows: {}, columns: {} }
   const updateFrozen = (field: 'rows' | 'columns', value: number) => {
     if (!activeSheet) return
@@ -364,9 +369,28 @@ export function ConfigTablesPage() {
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState<string>()
+  const [defaultRowsInput, setDefaultRowsInput] = useState(String(DEFAULT_CONFIG_TABLE_FROZEN_ROWS))
+  const [defaultColumnsInput, setDefaultColumnsInput] = useState(String(DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS))
   const branchState = configTables?.branches.find((item) => item.name === branch)
   const hasLocalDev = configTables?.branches.some((item) => item.name === 'dev' && item.local) ?? false
   const branchFileCount = !includeDev && !deferredSearch.trim() && files ? files.total : branchState?.fileCount ?? 0
+
+  useEffect(() => {
+    setDefaultRowsInput(String(configTables?.defaultFrozenRows ?? DEFAULT_CONFIG_TABLE_FROZEN_ROWS))
+    setDefaultColumnsInput(String(configTables?.defaultFrozenColumns ?? DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS))
+  }, [configTables?.defaultFrozenRows, configTables?.defaultFrozenColumns])
+
+  const saveFreezeDefaults = async () => {
+    if (!configTables) return
+    const rows = Number(defaultRowsInput)
+    const columns = Number(defaultColumnsInput)
+    if (defaultRowsInput.trim() === '' || defaultColumnsInput.trim() === '' || !Number.isInteger(rows) || !Number.isInteger(columns) || rows < 0 || rows > MAX_FROZEN_ROWS || columns < 0 || columns > MAX_FROZEN_COLUMNS) {
+      setError('默认固定行列数必须是 0 到 50 之间的整数')
+      return
+    }
+    const saved = await updateState(() => localBridge.setConfigTableFreezeDefaults(rows, columns, configTables.revision), '保存默认固定行列')
+    if (!saved) await refreshConfigTables()
+  }
 
   const updateState = async (action: () => Promise<typeof configTables>, label: string) => {
     setBusy(label)
@@ -426,6 +450,14 @@ export function ConfigTablesPage() {
         const path = await localBridge.selectDirectory()
         if (path) await updateState(() => localBridge.setConfigTableRoot(path), '设置配置表目录')
       }}><FolderOpen size={14} />选择目录</ToolButton>
+    </section>
+    <section className="panel config-default-freeze-panel">
+      <div><strong>表格默认固定</strong><span>新打开的工作表默认固定这些行列；查看时仍可临时调整。</span></div>
+      <div className="config-default-freeze-fields">
+        <label>固定行<input aria-label="默认固定行数" type="number" min={0} max={MAX_FROZEN_ROWS} step={1} value={defaultRowsInput} onChange={(event) => setDefaultRowsInput(event.target.value)} /></label>
+        <label>固定列<input aria-label="默认固定列数" type="number" min={0} max={MAX_FROZEN_COLUMNS} step={1} value={defaultColumnsInput} onChange={(event) => setDefaultColumnsInput(event.target.value)} /></label>
+        <ToolButton disabled={Boolean(busy) || !configTables || (defaultRowsInput === String(configTables.defaultFrozenRows) && defaultColumnsInput === String(configTables.defaultFrozenColumns))} onClick={() => void saveFreezeDefaults()}>保存默认值</ToolButton>
+      </div>
     </section>
     {!configTables?.rootPath ? <EmptyState title="请先设置配置表目录"><span>选择包含各个分支子目录的 SVN 工作副本目录。</span></EmptyState> : <section className="config-branch-grid">
       {configTables.branches.length ? configTables.branches.map((item) => <article key={item.name} className={`config-branch-card ${item.local ? '' : 'remote-only'}`}>

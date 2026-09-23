@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import type { ConfigTableFile, ConfigTableRange } from '../../shared/types'
 import { localBridge } from '../lib/api'
-import { CONFIG_TABLE_LARGE_FILE_THRESHOLD, LargeWorkbookDialog, requiresLargeWorkbookConfirmation, WorkbookViewer } from './ConfigTablesPage'
+import { useAppStore } from '../store/appStore'
+import { CONFIG_TABLE_LARGE_FILE_THRESHOLD, ConfigTablesPage, LargeWorkbookDialog, requiresLargeWorkbookConfirmation, WorkbookViewer } from './ConfigTablesPage'
 
 const file: ConfigTableFile = {
   branch: 'dev',
@@ -15,6 +17,7 @@ const file: ConfigTableFile = {
 
 beforeEach(() => {
   window.localStorage.clear()
+  useAppStore.setState({ configTables: { schemaVersion: 1, updatedAt: file.updatedAt, revision: 1, rootPath: '', defaultFrozenRows: 8, defaultFrozenColumns: 1, branches: [] } })
   Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: vi.fn() })
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn(async () => undefined) } })
   vi.spyOn(localBridge, 'getConfigTableWorkbook').mockResolvedValue({
@@ -32,7 +35,7 @@ beforeEach(() => {
   vi.spyOn(localBridge, 'searchConfigTableCells').mockResolvedValue([{ row: 1, column: 1, address: 'A1', text: '完整的单元格内容' }])
 })
 
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => { cleanup(); useAppStore.setState({ configTables: undefined }); vi.restoreAllMocks() })
 
 describe('ConfigTablesPage workbook viewer', () => {
   it('shows selected cell content between search and sheet tabs and copies it with Ctrl+C', async () => {
@@ -55,6 +58,8 @@ describe('ConfigTablesPage workbook viewer', () => {
   it('loads additional ranges for multiple frozen rows and columns', async () => {
     render(<WorkbookViewer file={file} />)
     await screen.findByRole('button', { name: '完整的单元格内容' }, { timeout: 3000 })
+    expect((screen.getByLabelText('固定表头行数') as HTMLInputElement).value).toBe('8')
+    expect((screen.getByLabelText('固定表头列数') as HTMLInputElement).value).toBe('1')
     const rangeSpy = vi.mocked(localBridge.getConfigTableRange)
     rangeSpy.mockClear()
 
@@ -64,6 +69,14 @@ describe('ConfigTablesPage workbook viewer', () => {
     await waitFor(() => expect(rangeSpy).toHaveBeenCalled())
     expect((screen.getByLabelText('固定表头行数') as HTMLInputElement).value).toBe('3')
     expect((screen.getByLabelText('固定表头列数') as HTMLInputElement).value).toBe('2')
+  })
+
+  it('limits default frozen counts to a short sheet and saves new defaults', async () => {
+    vi.mocked(localBridge.getConfigTableWorkbook).mockResolvedValueOnce({ ...file, sheets: [{ name: 'Short', rowCount: 3, columnCount: 1 }] })
+    render(<WorkbookViewer file={file} />)
+    await screen.findByRole('button', { name: '完整的单元格内容' }, { timeout: 3000 })
+    expect((screen.getByLabelText('固定表头行数') as HTMLInputElement).value).toBe('3')
+    expect((screen.getByLabelText('固定表头列数') as HTMLInputElement).value).toBe('1')
   })
 
   it('adjusts the table font size and keeps the preference locally', async () => {
@@ -100,6 +113,20 @@ describe('ConfigTablesPage workbook viewer', () => {
     fireEvent.pointerMove(window, { clientX: 160 })
     fireEvent.pointerUp(window)
     expect((cell as HTMLElement).style.width).toBe('208px')
+  })
+})
+
+describe('config table freeze defaults', () => {
+  it('saves defaults from the tool home page', async () => {
+    vi.spyOn(localBridge, 'setConfigTableFreezeDefaults').mockImplementation(async (rows, columns) => ({ ...useAppStore.getState().configTables!, defaultFrozenRows: rows, defaultFrozenColumns: columns, revision: 2 }))
+    render(<MemoryRouter initialEntries={['/config-tables']}><ConfigTablesPage /></MemoryRouter>)
+    expect((screen.getByLabelText('默认固定行数') as HTMLInputElement).value).toBe('8')
+    expect((screen.getByLabelText('默认固定列数') as HTMLInputElement).value).toBe('1')
+    fireEvent.change(screen.getByLabelText('默认固定行数'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('默认固定列数'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存默认值' }))
+    await waitFor(() => expect(localBridge.setConfigTableFreezeDefaults).toHaveBeenCalledWith(5, 2, 1))
+    await waitFor(() => expect(useAppStore.getState().configTables).toMatchObject({ defaultFrozenRows: 5, defaultFrozenColumns: 2 }))
   })
 })
 

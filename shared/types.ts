@@ -232,6 +232,8 @@ export interface ServerStatusState {
 
 export type ConfigTableSearchMode = 'tokens' | 'exact'
 export type ConfigTableCellSearchMode = 'tokens' | 'exact'
+export const DEFAULT_CONFIG_TABLE_FROZEN_ROWS = 8
+export const DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS = 1
 
 export interface ConfigTableBranch {
   name: string
@@ -247,6 +249,8 @@ export interface ConfigTableState {
   updatedAt: string
   revision: number
   rootPath: string
+  defaultFrozenRows: number
+  defaultFrozenColumns: number
   localRefreshedAt?: string
   remoteSyncedAt?: string
   branches: ConfigTableBranch[]
@@ -610,6 +614,7 @@ export interface LocalBridge {
   syncServerStatus(url: string): Promise<ServerStatusState>
   getConfigTableState(): Promise<ConfigTableState>
   setConfigTableRoot(path: string): Promise<ConfigTableState>
+  setConfigTableFreezeDefaults(rows: number, columns: number, revision: number): Promise<ConfigTableState>
   refreshConfigTableLocal(): Promise<ConfigTableState>
   syncConfigTableRemote(): Promise<ConfigTableState>
   setConfigTableBranchPinned(branch: string, pinned: boolean): Promise<ConfigTableState>

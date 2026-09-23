@@ -249,6 +249,7 @@ export const localBridge: LocalBridge = {
   syncServerStatus: (url) => request<ServerStatusState>('/api/server-status/sync', { method: 'POST', body: JSON.stringify({ url }) }),
   getConfigTableState: () => request<ConfigTableState>('/api/config-tables'),
   setConfigTableRoot: (path) => request<ConfigTableState>('/api/config-tables/root', { method: 'PUT', body: JSON.stringify({ path }) }),
+  setConfigTableFreezeDefaults: (rows, columns, revision) => request<ConfigTableState>('/api/config-tables/freeze-defaults', { method: 'PATCH', body: JSON.stringify({ rows, columns, revision }) }),
   refreshConfigTableLocal: () => request<ConfigTableState>('/api/config-tables/refresh-local', { method: 'POST', body: '{}' }),
   syncConfigTableRemote: () => request<ConfigTableState>('/api/config-tables/sync-remote', { method: 'POST', body: '{}' }),
   setConfigTableBranchPinned: (branch, pinned) => request<ConfigTableState>(`/api/config-tables/branches/${encodeURIComponent(branch)}/pin`, { method: 'PATCH', body: JSON.stringify({ pinned }) }),

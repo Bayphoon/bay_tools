@@ -4,6 +4,7 @@ import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { promisify } from 'node:util'
 import ExcelJS from 'exceljs'
 import type { Cell, Workbook, Worksheet } from 'exceljs'
+import { DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS, DEFAULT_CONFIG_TABLE_FROZEN_ROWS } from '../shared/types.js'
 import type {
   ConfigTableBranch,
   ConfigTableCellMatch,
@@ -44,6 +45,8 @@ interface PersistedConfigTableState {
   remoteSyncedAt?: string
   remoteBranches: string[]
   pinnedBranches?: string[]
+  defaultFrozenRows?: number
+  defaultFrozenColumns?: number
 }
 
 interface ConfigTableBranchIndex {
@@ -174,6 +177,8 @@ export class ConfigTableStore {
         rootPath,
         remoteBranches: [],
         pinnedBranches: [],
+        defaultFrozenRows: DEFAULT_CONFIG_TABLE_FROZEN_ROWS,
+        defaultFrozenColumns: DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS,
       } satisfies PersistedConfigTableState)
     }
     if (!(await exists(this.indexPath))) {
@@ -243,11 +248,27 @@ export class ConfigTableStore {
       ...(index.branches[name]?.scanVersion === CONFIG_TABLE_SCAN_VERSION ? { fileCount: index.branches[name].files.length, lastScannedAt: index.branches[name].scannedAt } : {}),
     }))
     const { remoteBranches: _remoteBranches, pinnedBranches: _pinnedBranches, ...publicFields } = state
-    return { ...publicFields, branches }
+    return {
+      ...publicFields,
+      defaultFrozenRows: state.defaultFrozenRows ?? DEFAULT_CONFIG_TABLE_FROZEN_ROWS,
+      defaultFrozenColumns: state.defaultFrozenColumns ?? DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS,
+      branches,
+    }
   }
 
   async getState(): Promise<ConfigTableState> {
     return this.publicState()
+  }
+
+  async setFreezeDefaults(rows: number, columns: number, revision: number): Promise<ConfigTableState> {
+    if (!Number.isInteger(rows) || rows < 0 || rows > 50 || !Number.isInteger(columns) || columns < 0 || columns > 50) {
+      throw new AppError(400, 'INVALID_CONFIG_FREEZE_DEFAULTS', '默认固定行列数必须是 0 到 50 之间的整数')
+    }
+    const state = await this.state()
+    if (state.revision !== revision) throw new AppError(409, 'REVISION_CONFLICT', '配置表设置已在别处更新，请刷新后重试')
+    const updated = { ...state, defaultFrozenRows: rows, defaultFrozenColumns: columns, revision: state.revision + 1, updatedAt: now() }
+    await writeJson(this.statePath, updated)
+    return this.publicState(updated)
   }
 
   async setRootPath(input: string): Promise<ConfigTableState> {
@@ -264,6 +285,8 @@ export class ConfigTableStore {
       localRefreshedAt: now(),
       remoteBranches: [],
       pinnedBranches: [],
+      defaultFrozenRows: state.defaultFrozenRows ?? DEFAULT_CONFIG_TABLE_FROZEN_ROWS,
+      defaultFrozenColumns: state.defaultFrozenColumns ?? DEFAULT_CONFIG_TABLE_FROZEN_COLUMNS,
     }
     await Promise.all([
       writeJson(this.statePath, updated),

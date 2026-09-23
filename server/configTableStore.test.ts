@@ -151,6 +151,26 @@ describe('ConfigTableStore', () => {
     await expect(reopened.setBranchPinned('missing', true)).rejects.toMatchObject({ code: 'CONFIG_BRANCH_NOT_FOUND' })
   })
 
+  it('defaults to eight frozen rows and one column and persists changed defaults', async () => {
+    const { projectRoot, configRoot } = await fixture()
+    const store = new ConfigTableStore(projectRoot, { rootPath: configRoot })
+    await store.init()
+
+    let state = await store.getState()
+    expect([state.defaultFrozenRows, state.defaultFrozenColumns]).toEqual([8, 1])
+    await expect(store.setFreezeDefaults(51, 1, state.revision)).rejects.toMatchObject({ code: 'INVALID_CONFIG_FREEZE_DEFAULTS' })
+    state = await store.setFreezeDefaults(4, 2, state.revision)
+    expect([state.defaultFrozenRows, state.defaultFrozenColumns]).toEqual([4, 2])
+    await expect(store.setFreezeDefaults(3, 1, state.revision - 1)).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
+
+    const reopened = new ConfigTableStore(projectRoot, { rootPath: configRoot })
+    await reopened.init()
+    state = await reopened.getState()
+    expect([state.defaultFrozenRows, state.defaultFrozenColumns]).toEqual([4, 2])
+    state = await reopened.setRootPath(configRoot)
+    expect([state.defaultFrozenRows, state.defaultFrozenColumns]).toEqual([4, 2])
+  })
+
   it('syncs remote names through svn argument arrays and updates one local branch', async () => {
     const { projectRoot, configRoot, branchRoot } = await fixture()
     await writeWorkbook(join(branchRoot, 'server.xlsx'))
