@@ -46,7 +46,7 @@ import type {
   SidebarToolId,
   TrashItem,
 } from '../shared/types.js'
-import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES, SIDEBAR_TOOL_IDS } from '../shared/types.js'
+import { FILE_WORKBENCH_MAX_UPLOAD_SIZE, FILE_WORKBENCH_TEXT_EDIT_LIMIT, JSON_WORKSPACE_MAX_PANES, JSON_WORKSPACE_MIN_PANES, SIDEBAR_TOOL_IDS, SIDEBAR_TOGGLEABLE_IDS } from '../shared/types.js'
 import { AppError, ConflictError } from './errors.js'
 import { atomicWrite, exists, readJson, recoverAtomicArtifacts, writeJson } from './filesystem.js'
 
@@ -274,7 +274,7 @@ function defaultSettings(): AppSettings {
       sunset: '19:00',
       transitionMinutes: 30,
     },
-    sidebar: { collapsedGroups: [], width: 252, toolOrder: [...SIDEBAR_TOOL_IDS] },
+    sidebar: { collapsedGroups: [], width: 252, toolOrder: [...SIDEBAR_TOOL_IDS], hiddenTabs: [] },
     workSchedule: {
       workDays: [1, 2, 3, 4, 5],
       start: '10:00',
@@ -295,7 +295,8 @@ function normalizeSettings(value: AppSettings): AppSettings {
   for (const id of SIDEBAR_TOOL_IDS) {
     if (!toolOrder.includes(id)) toolOrder.push(id)
   }
-  return { ...value, sidebar: { ...value.sidebar, toolOrder } }
+  const hiddenTabs = SIDEBAR_TOGGLEABLE_IDS.filter((id) => value.sidebar.hiddenTabs?.includes(id))
+  return { ...value, sidebar: { ...value.sidebar, toolOrder, hiddenTabs } }
 }
 
 function ensureSafeRelative(input: string): string {

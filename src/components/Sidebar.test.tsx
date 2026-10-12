@@ -33,6 +33,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('Sidebar nested collapse state', () => {
+  it('hides selected tool entries and their children while keeping home and settings accessible', () => {
+    useAppStore.setState({ settings: { ...settings, sidebar: { ...settings.sidebar, hiddenTabs: ['json', 'markdown', 'timestamp', 'data-sync'] } } })
+    render(<MemoryRouter initialEntries={['/json/workspace-1']}><Sidebar /></MemoryRouter>)
+    expect(screen.queryByRole('button', { name: 'JSON 工具' })).toBeNull()
+    expect(screen.queryByText('分组中的 JSON')).toBeNull()
+    expect(screen.queryByRole('button', { name: '文档' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Timestamp' })).toBeNull()
+    expect(screen.queryByRole('link', { name: '数据同步' })).toBeNull()
+    expect(screen.getByRole('link', { name: '主页' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /设置与垃圾箱/ })).toBeTruthy()
+  })
+
   it('applies the saved custom order to root tool tabs while keeping home first', () => {
     useAppStore.setState({ settings: { ...settings, sidebar: { ...settings.sidebar, toolOrder: ['server-status', 'bookmarks', 'json', 'markdown', 'code-cards', 'files', 'config-tables', 'timestamp', 'color', 'translation', 'language'] } } })
     render(<MemoryRouter initialEntries={['/']}><Sidebar /></MemoryRouter>)

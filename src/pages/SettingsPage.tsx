@@ -1,9 +1,9 @@
 import * as Tabs from '@radix-ui/react-tabs'
-import { ArrowDown, ArrowUp, LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, LayoutGrid, Monitor, Moon, RefreshCw, RotateCcw, Sun, Sunrise, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { DeepSeekSettings } from '../components/DeepSeekSettings'
-import { SIDEBAR_TOOL_IDS, type AppSettings, type ShortcutLocation, type SidebarToolId, type ThemeMode, type TrashItem } from '../../shared/types'
+import { SIDEBAR_TOOL_IDS, type AppSettings, type ShortcutLocation, type SidebarTabId, type SidebarToolId, type ThemeMode, type TrashItem } from '../../shared/types'
 import { EmptyState, InlineError, PageHeader, ToolButton } from '../components/ui'
 import { ApiError, localBridge } from '../lib/api'
 import { confirmAction } from '../lib/confirmation'
@@ -44,6 +44,10 @@ export function SettingsPage() {
 
   const updateTheme = (patch: Partial<AppSettings['theme']>) => setDraft((value) => ({ ...value, theme: { ...value.theme, ...patch } }))
   const updateToolOrder = (toolOrder: SidebarToolId[]) => setDraft((value) => ({ ...value, sidebar: { ...value.sidebar, toolOrder } }))
+  const toggleTab = (id: SidebarTabId) => setDraft((value) => {
+    const hidden = value.sidebar.hiddenTabs ?? []
+    return { ...value, sidebar: { ...value.sidebar, hiddenTabs: hidden.includes(id) ? hidden.filter((item) => item !== id) : [...hidden, id] } }
+  })
   const save = async () => {
     try { await saveSettings(draft); setSaved(true); window.setTimeout(() => setSaved(false), 1500) }
     catch (value) { setError(value instanceof Error ? value.message : '设置保存失败') }
@@ -119,10 +123,11 @@ export function SettingsPage() {
         <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存外观设置'}</ToolButton></div>
       </Tabs.Content>
       <Tabs.Content value="sidebar" className="settings-content">
-        <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">TOOL ORDER</span><h2>功能页签顺序</h2><p>主页固定在顶部；数据同步和设置固定在底部。其余工具可以按使用习惯排列。</p></div><ToolButton onClick={() => updateToolOrder([...SIDEBAR_TOOL_IDS])}><RotateCcw size={14} />恢复默认</ToolButton></div>
-          <div className="sidebar-order-list">{normalizeSidebarToolOrder(draft.sidebar.toolOrder).map((id, index, order) => <div className="sidebar-order-item" key={id}><span>{index + 1}</span><strong>{sidebarToolLabels[id]}</strong><div><button type="button" aria-label={`上移 ${sidebarToolLabels[id]}`} disabled={index === 0} onClick={() => updateToolOrder(moveSidebarTool(order, id, -1))}><ArrowUp size={15} /></button><button type="button" aria-label={`下移 ${sidebarToolLabels[id]}`} disabled={index === order.length - 1} onClick={() => updateToolOrder(moveSidebarTool(order, id, 1))}><ArrowDown size={15} /></button></div></div>)}</div>
+        <section className="settings-section"><div className="section-heading"><div><span className="eyebrow">SIDEBAR</span><h2>功能页签</h2><p>调整工具顺序和显示状态。主页与设置始终显示；隐藏工具不会删除数据，也不影响直接访问地址。</p></div><ToolButton onClick={() => setDraft((value) => ({ ...value, sidebar: { ...value.sidebar, toolOrder: [...SIDEBAR_TOOL_IDS], hiddenTabs: [] } }))}><RotateCcw size={14} />恢复默认</ToolButton></div>
+          <div className="sidebar-order-list">{normalizeSidebarToolOrder(draft.sidebar.toolOrder).map((id, index, order) => <div className="sidebar-order-item" key={id}><span>{index + 1}</span><strong>{sidebarToolLabels[id]}{draft.sidebar.hiddenTabs?.includes(id) && <small>已隐藏</small>}</strong><div><button type="button" aria-label={`${draft.sidebar.hiddenTabs?.includes(id) ? '显示' : '隐藏'} ${sidebarToolLabels[id]}`} aria-pressed={!draft.sidebar.hiddenTabs?.includes(id)} onClick={() => toggleTab(id)}>{draft.sidebar.hiddenTabs?.includes(id) ? <EyeOff size={16} /> : <Eye size={16} />}</button><button type="button" aria-label={`上移 ${sidebarToolLabels[id]}`} disabled={index === 0} onClick={() => updateToolOrder(moveSidebarTool(order, id, -1))}><ArrowUp size={15} /></button><button type="button" aria-label={`下移 ${sidebarToolLabels[id]}`} disabled={index === order.length - 1} onClick={() => updateToolOrder(moveSidebarTool(order, id, 1))}><ArrowDown size={15} /></button></div></div>)}</div>
+          <div className="sidebar-order-list"><div className="sidebar-order-item"><span>·</span><strong>数据同步{draft.sidebar.hiddenTabs?.includes('data-sync') && <small>已隐藏</small>}</strong><div><button type="button" aria-label={`${draft.sidebar.hiddenTabs?.includes('data-sync') ? '显示' : '隐藏'} 数据同步`} aria-pressed={!draft.sidebar.hiddenTabs?.includes('data-sync')} onClick={() => toggleTab('data-sync')}>{draft.sidebar.hiddenTabs?.includes('data-sync') ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></div></div>
         </section>
-        <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存侧边栏顺序'}</ToolButton></div>
+        <div className="settings-save"><InlineError>{error}</InlineError><ToolButton className="primary" onClick={save}>{saved ? '已保存' : '保存侧边栏设置'}</ToolButton></div>
       </Tabs.Content>
       <Tabs.Content value="shortcut" className="settings-content">
         <div className="section-heading"><div><span className="eyebrow">WINDOWS SHORTCUT</span><h2>启动快捷方式</h2><p>快捷方式使用 BayTools 图标，并通过无终端窗口的启动方式打开。</p></div></div>

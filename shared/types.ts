@@ -2,6 +2,8 @@ export type ThemeMode = 'light' | 'dark' | 'manual' | 'solar'
 
 export const SIDEBAR_TOOL_IDS = ['bookmarks', 'json', 'markdown', 'code-cards', 'files', 'config-tables', 'timestamp', 'color', 'translation', 'language', 'server-status'] as const
 export type SidebarToolId = typeof SIDEBAR_TOOL_IDS[number]
+export const SIDEBAR_TOGGLEABLE_IDS = [...SIDEBAR_TOOL_IDS, 'data-sync'] as const
+export type SidebarTabId = typeof SIDEBAR_TOGGLEABLE_IDS[number]
 
 export interface AppSettings {
   schemaVersion: 1
@@ -20,6 +22,7 @@ export interface AppSettings {
     collapsedGroups: string[]
     width: number
     toolOrder?: SidebarToolId[]
+    hiddenTabs?: SidebarTabId[]
   }
   workSchedule: {
     workDays: number[]

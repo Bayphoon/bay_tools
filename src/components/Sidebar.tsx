@@ -245,6 +245,7 @@ export function Sidebar() {
   const configTablesActive = location.pathname === '/config-tables' || location.pathname.startsWith('/config-tables/')
   const toolOrder = normalizeSidebarToolOrder(settings?.sidebar.toolOrder)
   const toolStyle = (id: (typeof toolOrder)[number]) => ({ order: toolOrder.indexOf(id) + 1 })
+  const isToolVisible = (id: (typeof toolOrder)[number] | 'data-sync') => !settings?.sidebar.hiddenTabs?.includes(id)
 
   useEffect(() => {
     if (savingCollapsedGroups.current || pendingCollapsedGroups.current || !settings) return
@@ -421,8 +422,8 @@ export function Sidebar() {
     <div className="brand"><img className="brand-icon" src="/baytools-icon.png" alt="" /><div><strong>BayTools</strong><span>LOCAL WORKBENCH</span></div></div>
     <nav className="nav-main">
       <NavLink to="/" end className="nav-row nav-home" style={{ order: 0 }}><span className="nav-root-icon"><Home size={16} /></span><span>主页</span></NavLink>
-      <NavLink to="/bookmarks" className="nav-row" style={toolStyle('bookmarks')}><span className="nav-root-icon"><Bookmark size={16} /></span><span>书签</span></NavLink>
-      <div className="nav-group" style={toolStyle('json')}>
+      {isToolVisible('bookmarks') && <NavLink to="/bookmarks" className="nav-row" style={toolStyle('bookmarks')}><span className="nav-root-icon"><Bookmark size={16} /></span><span>书签</span></NavLink>}
+      {isToolVisible('json') && <div className="nav-group" style={toolStyle('json')}>
         <div className="nav-parent">
           <button className={jsonActive ? 'active' : undefined} aria-current={jsonActive ? 'page' : undefined} aria-expanded={jsonOpen} onClick={() => void selectGroup('json')}><span className="nav-root-icon"><Braces size={16} /></span><span>JSON 工具</span>{jsonOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加 JSON 内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('添加空 JSON', () => { void createWorkspace() })}{item('添加分组', () => { void createJsonFolder() })}</Menu>
@@ -434,8 +435,8 @@ export function Sidebar() {
             return <JsonFolderSection key={folder.id} folder={folder} folders={jsonFolders} workspaces={jsonWorkspaces.filter((workspace) => workspace.folderId === folder.id)} collapsed={sidebarGroupCollapsed(collapsedGroups, key)} onToggle={() => toggleCollapsed(key)} onCreate={() => createWorkspace(folder.id)} onChanged={refreshJson} />
           })}
         </div>}
-      </div>
-      <div className="nav-group" style={toolStyle('markdown')}>
+      </div>}
+      {isToolVisible('markdown') && <div className="nav-group" style={toolStyle('markdown')}>
         <div className="nav-parent">
           <button className={markdownActive ? 'active' : undefined} aria-current={markdownActive ? 'page' : undefined} aria-expanded={markdownOpen} onClick={() => void selectGroup('markdown')}><span className="nav-root-icon"><FileText size={16} /></span><span>文档</span>{markdownOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="文档操作" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建文件', () => { void createManagedDocument() })}{item('新建分组', () => { void createManagedFolder() })}{item('添加扫描目录', addMarkdownSource)}{item('刷新扫描目录', refreshMarkdown)}</Menu>
@@ -457,8 +458,8 @@ export function Sidebar() {
           }, true)}</Menu></div>
           {!collapsed && (source.error ? <div className="source-error">{source.error}</div> : visibleNodes.length ? <MarkdownNodes sourceId={source.id} nodes={visibleNodes} collapsedGroups={collapsedGroups} onToggle={toggleCollapsed} onChanged={refreshMarkdown} onCreate={(relativeDirectory) => createScannedDocument(source.id, relativeDirectory)} /> : <div className="source-empty">当前筛选下没有文件</div>)}
         </div>})}</div>}
-      </div>
-      <div className="nav-group" style={toolStyle('code-cards')}>
+      </div>}
+      {isToolVisible('code-cards') && <div className="nav-group" style={toolStyle('code-cards')}>
         <div className="nav-parent">
           <button className={codeCardsActive ? 'active' : undefined} aria-current={codeCardsActive ? 'page' : undefined} aria-expanded={codeCardsOpen} onClick={() => void selectGroup('code-cards')}><span className="nav-root-icon"><PanelsTopLeft size={16} /></span><span>代码段</span>{codeCardsOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="添加代码段内容" triggerIcon={<Plus size={15} />} alwaysVisible>{item('新建代码段', () => { void createCodeCardWorkspace() })}{item('新建分组', () => { void createCodeCardFolder() })}</Menu>
@@ -470,9 +471,9 @@ export function Sidebar() {
             return <CodeCardFolderSection key={folder.id} folder={folder} folders={codeCards.folders} workspaces={codeCards.workspaces.filter((workspace) => workspace.folderId === folder.id)} collapsed={sidebarGroupCollapsed(collapsedGroups, key)} onToggle={() => toggleCollapsed(key)} onCreate={() => createCodeCardWorkspace(folder.id)} onChanged={refreshCodeCards} />
           })}
         </div>}
-      </div>
-      <NavLink to="/files" className="nav-row" style={toolStyle('files')}><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>
-      <div className="nav-group" style={toolStyle('config-tables')}>
+      </div>}
+      {isToolVisible('files') && <NavLink to="/files" className="nav-row" style={toolStyle('files')}><span className="nav-root-icon"><Files size={16} /></span><span>文件工作台</span></NavLink>}
+      {isToolVisible('config-tables') && <div className="nav-group" style={toolStyle('config-tables')}>
         <div className="nav-parent">
           <button className={configTablesActive ? 'active' : undefined} aria-current={configTablesActive ? 'page' : undefined} aria-expanded={configTablesOpen} onClick={() => void selectGroup('config-tables')}><span className="nav-root-icon"><Table2 size={16} /></span><span>配置表</span>{configTablesOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <Menu triggerLabel="配置表操作" alwaysVisible>{item('刷新本地分支列表', async () => {
@@ -498,11 +499,11 @@ export function Sidebar() {
             try { useAppStore.setState({ configTables: await localBridge.downloadConfigTableBranch(branch.name) }); await refreshConfigTables() } catch (error) { window.alert(error instanceof Error ? error.message : '下载失败') }
           })}</Menu>
         </div>)}</div>}
-      </div>
-      <NavLink to="/timestamp" className="nav-row" style={toolStyle('timestamp')}><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>
-      <NavLink to="/color" className="nav-row" style={toolStyle('color')}><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>
-      <NavLink to="/translation" className="nav-row" style={toolStyle('translation')}><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>
-      <div className="nav-group" style={toolStyle('language')}>
+      </div>}
+      {isToolVisible('timestamp') && <NavLink to="/timestamp" className="nav-row" style={toolStyle('timestamp')}><span className="nav-root-icon"><Clock3 size={16} /></span><span>Timestamp</span></NavLink>}
+      {isToolVisible('color') && <NavLink to="/color" className="nav-row" style={toolStyle('color')}><span className="nav-root-icon"><Palette size={16} /></span><span>颜色格式转换</span></NavLink>}
+      {isToolVisible('translation') && <NavLink to="/translation" className="nav-row" style={toolStyle('translation')}><span className="nav-root-icon"><MessageSquareText size={16} /></span><span>翻译</span></NavLink>}
+      {isToolVisible('language') && <div className="nav-group" style={toolStyle('language')}>
         <div className="nav-parent">
           <button className={languageActive ? 'active' : undefined} aria-current={languageActive ? 'page' : undefined} aria-expanded={languageOpen} onClick={() => void selectGroup('language')}><span className="nav-root-icon"><Languages size={16} /></span><span>多语言查询</span>{languageOpen ? <ChevronDown className="nav-chevron" size={14} /> : <ChevronRight className="nav-chevron" size={14} />}</button>
           <button className="icon-button nav-action always-visible" aria-label="添加语种" onClick={createLanguageSource}><Plus size={15} /></button>
@@ -520,11 +521,11 @@ export function Sidebar() {
             }
           }, true)}</Menu>
         </div>)}</div>}
-      </div>
-      <NavLink to="/server-status" className="nav-row" style={toolStyle('server-status')}><span className="nav-root-icon"><Server size={16} /></span><span>服务器状态</span></NavLink>
+      </div>}
+      {isToolVisible('server-status') && <NavLink to="/server-status" className="nav-row" style={toolStyle('server-status')}><span className="nav-root-icon"><Server size={16} /></span><span>服务器状态</span></NavLink>}
     </nav>
     <div className="sidebar-bottom">
-      <NavLink to="/data-sync" className="nav-row"><span className="nav-root-icon"><CloudUpload size={16} /></span><span>数据同步</span></NavLink>
+      {isToolVisible('data-sync') && <NavLink to="/data-sync" className="nav-row"><span className="nav-root-icon"><CloudUpload size={16} /></span><span>数据同步</span></NavLink>}
       <NavLink to="/settings" className="nav-row"><span className="nav-root-icon"><Settings size={16} /></span><span>设置与垃圾箱</span>{<Trash2 size={13} className="nav-tail" />}</NavLink>
     </div>
   </aside>

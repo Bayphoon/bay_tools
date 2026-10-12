@@ -27,6 +27,19 @@ describe('BayToolsStore', () => {
     expect(JSON.parse(await readFile(join(root, 'Doc', 'settings.json'), 'utf8')).schemaVersion).toBe(1)
   })
 
+  it('persists hidden sidebar tabs and normalizes stale entries', async () => {
+    const settings = await store.getSettings()
+    expect(settings.sidebar.hiddenTabs).toEqual([])
+    const settingsPath = join(root, 'Doc', 'settings.json')
+    const legacy = JSON.parse(await readFile(settingsPath, 'utf8'))
+    delete legacy.sidebar.hiddenTabs
+    await writeFile(settingsPath, JSON.stringify(legacy), 'utf8')
+    expect((await store.getSettings()).sidebar.hiddenTabs).toEqual([])
+    const updated = await store.updateSettings({ ...settings, sidebar: { ...settings.sidebar, hiddenTabs: ['markdown', 'data-sync', 'markdown', 'removed-tool' as 'markdown'] } })
+    expect(updated.sidebar.hiddenTabs).toEqual(['markdown', 'data-sync'])
+    expect((await store.getSettings()).sidebar.hiddenTabs).toEqual(['markdown', 'data-sync'])
+  })
+
   it('persists the home JSON scratchpad including incomplete JSON text', async () => {
     const scratchpad = await store.getJsonScratchpad()
     expect(scratchpad.mode).toBe('text')
