@@ -240,6 +240,7 @@ export const localBridge: LocalBridge = {
   listLanguageSources: () => request<LanguageSourceSummary[]>('/api/languages'),
   createLanguageSource: () => request<LanguageSource>('/api/languages', { method: 'POST', body: '{}' }),
   getLanguageSource: (id) => request<LanguageSource>(`/api/languages/${id}`),
+  updateLanguageSourceUrl: (id, url, revision) => request<LanguageSource>(`/api/languages/${id}/url`, { method: 'PUT', body: JSON.stringify({ url, revision }) }),
   deleteLanguageSource: (id) => request<void>(`/api/languages/${id}`, { method: 'DELETE' }),
   syncLanguageSource: (id, url) => request<LanguageSource>(`/api/languages/${id}/sync`, { method: 'POST', body: JSON.stringify({ url }) }),
   searchLanguageEntries: (id, search, page, mode) => request<LanguageEntryPage>(`/api/languages/${id}/search?${query({ search, page: String(page), mode })}`),

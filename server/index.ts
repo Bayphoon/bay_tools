@@ -31,7 +31,7 @@ const personalDataManager = new PersonalDataManager(projectRoot)
 const codeCardStore = new CodeCardStore(projectRoot)
 const configTableStore = new ConfigTableStore(projectRoot)
 const bookmarkStore = new BookmarkStore(projectRoot)
-const apiVersion = 28
+const apiVersion = 29
 const sourceVersion = process.env.BAYTOOLS_SOURCE_VERSION ?? null
 const serviceId = randomBytes(16).toString('hex')
 const sessionToken = randomBytes(32).toString('base64url')
@@ -123,6 +123,7 @@ app.put<{ Body: ColorState }>('/api/colors', async (request) => store.updateColo
 app.get('/api/languages', async () => languageStore.listSources())
 app.post('/api/languages', async () => languageStore.createSource())
 app.get<{ Params: { id: string } }>('/api/languages/:id', async (request) => languageStore.getSource(request.params.id))
+app.put<{ Params: { id: string }; Body: { url: string; revision: number } }>('/api/languages/:id/url', async (request) => languageStore.updateSourceUrl(request.params.id, request.body.url, request.body.revision))
 app.delete<{ Params: { id: string } }>('/api/languages/:id', async (request, reply) => {
   await languageStore.deleteSource(request.params.id)
   return reply.status(204).send()

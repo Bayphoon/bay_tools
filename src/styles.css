@@ -673,10 +673,26 @@ a { color: inherit; text-decoration: none; }
 
 .language-page { display: flex; flex-direction: column; gap: 14px; }
 .language-page > .page-header { min-height: 46px; margin-bottom: 0; }
-.language-source-panel { display: grid; gap: 9px; padding: 14px; }
-.language-source-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.language-source-row .language-sync-button { min-width: 122px; }
-.language-source-meta { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 12px; }
+.language-config-button { border-color: transparent; background: transparent; color: var(--muted); }
+.language-config-button:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.language-sync-button { min-width: 110px; }
+.language-source-meta { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 12px; }
+.language-source-stale { color: var(--warning); }
+.language-primary-search { width: min(100%, 720px); margin: 18px auto 8px; }
+.language-primary-search .language-search-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.language-primary-search .language-search { width: 100%; height: 54px; padding: 0 14px; border-radius: 9px; background: var(--surface); }
+.language-primary-search .language-search > svg { width: 19px; height: 19px; }
+.language-primary-search .language-search input { font-size: 16px; }
+.language-primary-search .language-search-mode { justify-self: center; }
+.language-primary-search .language-search-mode button { font-size: 14px; }
+.language-config-dialog { width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 22px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 24px 70px rgba(0, 0, 0, .38); }
+.language-config-dialog::backdrop { background: rgba(5, 10, 20, .58); backdrop-filter: blur(3px); }
+.language-config-dialog form { display: grid; gap: 10px; }
+.language-config-dialog h2 { margin: 0; font-size: 19px; }
+.language-config-dialog p { margin: 0 0 9px; color: var(--muted); font-size: 13px; }
+.language-config-dialog label { font-size: 13px; font-weight: 650; }
+.language-config-dialog .field { height: 42px; font-size: 14px; }
+.language-config-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .spinning { animation: spin .8s linear infinite; }
 .language-section { display: grid; gap: 11px; padding: 15px; }
 .language-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }

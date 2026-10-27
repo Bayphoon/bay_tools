@@ -49,4 +49,26 @@ describe('language text', () => {
     expect(await store.listSources()).toEqual([])
     await expect(access(join(root, 'Doc', 'language', 'cache', `${source.id}.txt`))).rejects.toThrow()
   })
+
+  it('saves a source link without downloading and retains cached data until the next sync', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'baytools-language-'))
+    tempRoots.push(root)
+    const store = new LanguageStore(root)
+    await store.init()
+    const source = await store.createSource()
+    const fetchMock = vi.fn(async () => new Response('458015=确认时间', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const configured = await store.updateSourceUrl(source.id, 'example.test/language/zh_CN.txt', source.revision)
+    expect(configured).toMatchObject({ title: '未命名语种', url: 'https://example.test/language/zh_CN.txt', entryCount: 0 })
+    expect(fetchMock).not.toHaveBeenCalled()
+    await expect(store.updateSourceUrl(source.id, 'https://example.test/other.txt', source.revision)).rejects.toMatchObject({ code: 'REVISION_CONFLICT' })
+    await expect(store.updateSourceUrl(source.id, 'file:///tmp/zh_CN.txt', configured.revision)).rejects.toMatchObject({ code: 'INVALID_LANGUAGE_URL' })
+
+    const synced = await store.syncSource(source.id, configured.url)
+    const changed = await store.updateSourceUrl(source.id, 'example.test/language/en_US.txt', synced.revision)
+    expect(changed).toMatchObject({ url: 'https://example.test/language/en_US.txt', cachedUrl: synced.url, entryCount: 1 })
+    expect((await store.searchEntries(source.id, '458015', 1, 'fuzzy')).total).toBe(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })

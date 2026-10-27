@@ -195,6 +195,7 @@ export interface LanguageSourceSummary {
   id: string
   title: string
   url: string
+  cachedUrl?: string
   fileName?: string
   createdAt: string
   updatedAt: string
@@ -608,6 +609,7 @@ export interface LocalBridge {
   listLanguageSources(): Promise<LanguageSourceSummary[]>
   createLanguageSource(): Promise<LanguageSource>
   getLanguageSource(id: string): Promise<LanguageSource>
+  updateLanguageSourceUrl(id: string, url: string, revision: number): Promise<LanguageSource>
   deleteLanguageSource(id: string): Promise<void>
   syncLanguageSource(id: string, url: string): Promise<LanguageSource>
   searchLanguageEntries(id: string, search: string, page: number, mode: LanguageSearchMode): Promise<LanguageEntryPage>

@@ -1,5 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Copy, RefreshCw, Search, Star, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import type { LanguageEntry, LanguageEntryPage, LanguageSearchMode, LanguageSource } from '../../shared/types'
 import { ApiError, localBridge } from '../lib/api'
@@ -67,7 +67,9 @@ export function LanguagePage() {
   const { id } = useParams<{ id: string }>()
   const refreshLanguages = useAppStore((state) => state.refreshLanguages)
   const [source, setSource] = useState<LanguageSource>()
-  const [url, setUrl] = useState('')
+  const [configUrl, setConfigUrl] = useState('')
+  const [configError, setConfigError] = useState('')
+  const [configSaving, setConfigSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [searchMode, setSearchMode] = useState<LanguageSearchMode>('fuzzy')
   const [searchPage, setSearchPage] = useState(1)
@@ -84,6 +86,7 @@ export function LanguagePage() {
   const [error, setError] = useState<string>()
   const [reload, setReload] = useState(0)
   const copyTimer = useRef<number | undefined>(undefined)
+  const configDialog = useRef<HTMLDialogElement>(null)
 
   useEffect(() => () => { if (copyTimer.current) window.clearTimeout(copyTimer.current) }, [])
 
@@ -101,7 +104,7 @@ export function LanguagePage() {
     void localBridge.getLanguageSource(id).then((value) => {
       if (!active) return
       setSource(value)
-      setUrl(value.url)
+      setConfigUrl(value.url)
       const remaining = value.lastSyncedAt ? Math.ceil((Date.parse(value.lastSyncedAt) + 10_000 - Date.now()) / 1000) : 0
       setCooldownSeconds(Math.max(0, remaining))
     }).catch((reason) => {
@@ -140,8 +143,39 @@ export function LanguagePage() {
 
   const favoriteKeys = useMemo(() => new Set(source?.favorites.map((item) => item.key) ?? []), [source])
 
+  const openConfig = () => {
+    setConfigUrl(source?.url ?? '')
+    setConfigError('')
+    configDialog.current?.showModal()
+  }
+
+  const saveConfig = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!id || !source || configSaving) return
+    if (!configUrl.trim()) {
+      setConfigError('请输入多语言 TXT 文件链接')
+      return
+    }
+    setConfigSaving(true)
+    setConfigError('')
+    try {
+      const updated = await localBridge.updateLanguageSourceUrl(id, configUrl, source.revision)
+      setSource(updated)
+      await refreshLanguages()
+      configDialog.current?.close()
+    } catch (reason) {
+      setConfigError(reason instanceof Error ? reason.message : '保存配置失败')
+      if (reason instanceof ApiError && reason.code === 'REVISION_CONFLICT') {
+        const latest = await localBridge.getLanguageSource(id).catch(() => undefined)
+        if (latest) setSource(latest)
+      }
+    } finally {
+      setConfigSaving(false)
+    }
+  }
+
   const sync = async () => {
-    if (!id || !url.trim()) {
+    if (!id || !source?.url) {
       setError('请输入多语言 TXT 文件链接')
       return
     }
@@ -150,9 +184,8 @@ export function LanguagePage() {
     setCooldownSeconds(10)
     setError(undefined)
     try {
-      const updated = await localBridge.syncLanguageSource(id, url)
+      const updated = await localBridge.syncLanguageSource(id, source.url)
       setSource(updated)
-      setUrl(updated.url)
       setSearchPage(1)
       setFavoritePage(1)
       setReload((value) => value + 1)
@@ -200,20 +233,19 @@ export function LanguagePage() {
   if (!source || !id) return <div className="page"><PageHeader title="多语言查询" /><div className="inline-error">{error ?? '多语言页签不存在'}</div></div>
 
   return <div className="page language-page">
-    <PageHeader title={source.title} description="同步服务器 TXT 文件，搜索并收藏常用多语言条目" />
+    <PageHeader title={source.title} description="同步服务器 TXT 文件，搜索并收藏常用多语言条目" actions={<>
+      <ToolButton className={source.url ? 'language-config-button' : 'primary'} onClick={openConfig}>{source.url ? '修改配置' : '配置链接'}</ToolButton>
+      {source.url && <ToolButton className="primary language-sync-button" disabled={syncing || cooldownSeconds > 0} onClick={() => void sync()}><RefreshCw className={syncing ? 'spinning' : undefined} size={14} />{syncing ? '同步中' : cooldownSeconds > 0 ? `${cooldownSeconds} 秒后可同步` : '同步'}</ToolButton>}
+    </>} />
+    <div className="language-source-meta"><span>最后更新：{formatUpdateTime(source.lastSyncedAt)}</span><span>{source.entryCount} 条多语言</span>{source.lastSyncedAt && source.cachedUrl && source.cachedUrl !== source.url && <span className="language-source-stale">链接已修改，当前仍显示上次同步的数据</span>}</div>
+    {error && <div className="inline-error">{error}</div>}
 
-    <section className="tool-panel language-source-panel">
-      <div className="language-source-row">
-        <input className="field mono" value={url} onChange={(event) => setUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void sync() }} placeholder="https://wb-jenkins-xxx.net/xxx/xxx/zh_CN.txt" aria-label="多语言数据来源链接" />
-        <ToolButton className="primary language-sync-button" disabled={syncing || cooldownSeconds > 0} onClick={() => void sync()}><RefreshCw className={syncing ? 'spinning' : undefined} size={14} />{syncing ? '同步中' : cooldownSeconds > 0 ? `${cooldownSeconds} 秒后可同步` : '同步'}</ToolButton>
-      </div>
-      <div className="language-source-meta"><span>最后更新：{formatUpdateTime(source.lastSyncedAt)}</span><span>{source.entryCount} 条多语言</span></div>
-      {error && <div className="inline-error">{error}</div>}
+    <section className="language-primary-search" aria-label="搜索多语言">
+      <LanguageSearch value={search} mode={searchMode} onChange={(value) => { setSearch(value); setSearchPage(1) }} onModeChange={(mode) => { setSearchMode(mode); setSearchPage(1) }} placeholder="输入 key 或多语言内容" />
     </section>
 
     <section className="tool-panel language-section">
       <div className="language-section-heading"><div><h2>搜索结果</h2><span>{searchMode === 'fuzzy' ? 'key 或内容包含关键词即可匹配' : 'key 或内容必须与关键词完全一致'}</span></div><strong>{results.total} 条</strong></div>
-      <LanguageSearch value={search} mode={searchMode} onChange={(value) => { setSearch(value); setSearchPage(1) }} onModeChange={(mode) => { setSearchMode(mode); setSearchPage(1) }} placeholder="输入 key 或多语言内容" />
       <div className="language-entry-grid">
         {results.items.map((entry) => {
           const favorited = favoriteKeys.has(entry.key)
@@ -233,5 +265,15 @@ export function LanguagePage() {
       </div>
       <Pagination data={favorites} onPage={setFavoritePage} />
     </section>
+    <dialog ref={configDialog} className="language-config-dialog" aria-labelledby="language-config-title" onCancel={(event) => { if (configSaving) event.preventDefault() }}>
+      <form onSubmit={(event) => void saveConfig(event)}>
+        <h2 id="language-config-title">{source.url ? '修改多语言配置' : '配置多语言链接'}</h2>
+        <p>保存链接后，可在页面右上角手动同步服务器内容。</p>
+        <label htmlFor="language-config-url">TXT 文件链接</label>
+        <input id="language-config-url" className="field mono" value={configUrl} onChange={(event) => { setConfigUrl(event.target.value); setConfigError('') }} placeholder="https://example.com/zh_CN.txt" autoFocus />
+        {configError && <div className="inline-error" role="alert">{configError}</div>}
+        <div className="language-config-actions"><ToolButton type="button" disabled={configSaving} onClick={() => configDialog.current?.close()}>取消</ToolButton><ToolButton type="submit" className="primary" disabled={configSaving}>{configSaving ? '保存中' : '保存配置'}</ToolButton></div>
+      </form>
+    </dialog>
   </div>
 }

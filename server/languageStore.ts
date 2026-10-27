@@ -21,6 +21,9 @@ export const LANGUAGE_SYNC_COOLDOWN_MS = 10_000
 function normalizeUrl(input: string): URL {
   const value = input.trim()
   if (!value) throw new AppError(400, 'LANGUAGE_URL_REQUIRED', '请输入多语言文件链接')
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value) && !/^https?:\/\//i.test(value)) {
+    throw new AppError(400, 'INVALID_LANGUAGE_URL', '多语言文件链接只支持 HTTP 或 HTTPS')
+  }
   let url: URL
   try {
     url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`)
@@ -70,8 +73,8 @@ export function paginateLanguageEntries(entries: LanguageEntry[], search: string
 }
 
 function summary(source: LanguageSource): LanguageSourceSummary {
-  const { id, title, url, fileName, createdAt, updatedAt, lastSyncedAt, entryCount } = source
-  return { id, title, url, fileName, createdAt, updatedAt, lastSyncedAt, entryCount }
+  const { id, title, url, cachedUrl, fileName, createdAt, updatedAt, lastSyncedAt, entryCount } = source
+  return { id, title, url, cachedUrl, fileName, createdAt, updatedAt, lastSyncedAt, entryCount }
 }
 
 export class LanguageStore {
@@ -173,6 +176,20 @@ export class LanguageStore {
     return updated
   }
 
+  async updateSourceUrl(id: string, inputUrl: string, revision: number): Promise<LanguageSource> {
+    const url = normalizeUrl(inputUrl).toString()
+    return this.updateSource(id, (source) => {
+      if (source.revision !== revision) throw new ConflictError('多语言配置已在其他窗口中修改', source)
+      return {
+        ...source,
+        url,
+        cachedUrl: source.cachedUrl ?? (source.lastSyncedAt ? source.url : undefined),
+        revision: source.revision + 1,
+        updatedAt: now(),
+      }
+    })
+  }
+
   async syncSource(id: string, inputUrl: string): Promise<LanguageSource> {
     await this.getSource(id)
     const requestedUrl = normalizeUrl(inputUrl)
@@ -214,6 +231,7 @@ export class LanguageStore {
         ...source,
         title: fileName,
         url: requestedUrl.toString(),
+        cachedUrl: requestedUrl.toString(),
         fileName,
         lastSyncedAt: syncedAt,
         updatedAt: syncedAt,
